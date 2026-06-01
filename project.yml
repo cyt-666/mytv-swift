@@ -14,6 +14,8 @@ targets:
       - MyTV
     info:
       path: MyTV/Info.plist
+      properties:
+        TraktClientID: $(TRAKT_CLIENT_ID)
     settings:
       base:
         PRODUCT_BUNDLE_IDENTIFIER: com.mytv.app

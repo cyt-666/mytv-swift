@@ -40,7 +40,7 @@ struct ShowIds: Codable, Hashable {
     let tvdb: Int?
     let imdb: String?
     let tmdb: Int?
-    let tvrage: [Int]?
+    let tvrage: Int?
 }
 
 // MARK: - Show Details

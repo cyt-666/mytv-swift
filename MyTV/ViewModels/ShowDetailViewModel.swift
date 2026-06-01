@@ -5,21 +5,21 @@ import SwiftUI
 @MainActor
 final class ShowDetailViewModel {
     let showId: Int
+    let commentStore: CommentInteractionStore
     var show: ShowDetailsDTO?
     var seasons: [SeasonDTO] = []
     var translation: TranslationResult?
-    var comments: [CommentDTO] = []
-    var commentDraft = ""
-    var commentHasSpoiler = false
-    var isLoadingComments = false
-    var isPostingComment = false
-    var commentErrorMessage: String?
     var isLoading = false
 
     @ObservationIgnored
     private var appState: AppState?
 
-    init(showId: Int) { self.showId = showId }
+    init(showId: Int) {
+        self.showId = showId
+        self.commentStore = CommentInteractionStore { page, limit in
+            try await CommentAPI.showComments(id: showId, page: page, limit: limit)
+        }
+    }
 
     func configure(appState: AppState) { self.appState = appState }
 
@@ -39,52 +39,39 @@ final class ShowDetailViewModel {
         }
 
         translation = await TranslationService.shared.getShowTranslation(id: showId)
-        await loadComments()
+        await commentStore.loadComments()
     }
 
     func navigateToSeason(_ seasonNumber: Int) {
         appState?.navigate(to: .seasonDetail(showId: showId, seasonNumber: seasonNumber))
     }
 
-    func loadComments() async {
-        isLoadingComments = true
-        commentErrorMessage = nil
-        defer { isLoadingComments = false }
-
-        do {
-            comments = try await CommentAPI.showComments(id: showId)
-        } catch {
-            commentErrorMessage = CommentAPI.message(for: error)
-            print("加载剧集评论失败: \(error)")
-        }
-    }
-
     func postComment() async {
-        let text = commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
+        let text = commentStore.commentDraft.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !text.isEmpty else {
-            commentErrorMessage = "先写一条评论"
+            commentStore.commentErrorMessage = "先写一条评论"
             return
         }
         guard isLoggedIn else {
-            commentErrorMessage = "登录 Trakt 后才能发布评论"
+            commentStore.commentErrorMessage = "登录 Trakt 后才能发布评论"
             return
         }
 
-        isPostingComment = true
-        commentErrorMessage = nil
-        defer { isPostingComment = false }
+        commentStore.isPostingComment = true
+        commentStore.commentErrorMessage = nil
+        defer { commentStore.isPostingComment = false }
 
         do {
             let newComment = try await CommentAPI.postShowComment(
                 showId: showId,
                 comment: text,
-                spoiler: commentHasSpoiler
+                spoiler: commentStore.commentHasSpoiler
             )
-            commentDraft = ""
-            commentHasSpoiler = false
-            comments.insert(newComment, at: 0)
+            commentStore.commentDraft = ""
+            commentStore.commentHasSpoiler = false
+            commentStore.insertRootComment(newComment)
         } catch {
-            commentErrorMessage = CommentAPI.message(for: error)
+            commentStore.commentErrorMessage = CommentAPI.message(for: error)
             print("发布剧集评论失败: \(error)")
         }
     }

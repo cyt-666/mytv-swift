@@ -10,9 +10,13 @@ final class HomeViewModel {
     var startWatchingShows: [ShowDTO] = []
     var isLoading = false
 
+    var shouldShowRailPlaceholders: Bool {
+        AuthService.shared.isLoggedIn && isLoading
+    }
+
     func load() async {
-        if AuthService.shared.isLoggedIn, monthlyStats == nil {
-            monthlyStats = Self.cachedMonthlyStats()
+        if AuthService.shared.isLoggedIn {
+            restoreCachedContentIfNeeded()
         }
 
         isLoading = true
@@ -25,6 +29,7 @@ final class HomeViewModel {
             async let recShows = RecommendationAPI.shows()
             async let upNext = ProgressAPI.upNext()
             async let startShows = loadStartWatching()
+            var didLoadRailContent = false
 
             do {
                 let freshStats = try await stats
@@ -38,23 +43,31 @@ final class HomeViewModel {
             }
             do {
                 recommendedMovies = Array((try await recMovies).prefix(10))
+                didLoadRailContent = true
             } catch {
                 print("加载推荐电影失败: \(error)")
             }
             do {
                 recommendedShows = Array((try await recShows).prefix(10))
+                didLoadRailContent = true
             } catch {
                 print("加载推荐剧集失败: \(error)")
             }
             do {
                 upNextItems = Array((try await upNext).prefix(10))
+                didLoadRailContent = true
             } catch {
                 print("加载继续观看失败: \(error)")
             }
             do {
                 startWatchingShows = Array((try await startShows).prefix(10))
+                didLoadRailContent = true
             } catch {
                 print("加载开始观看失败: \(error)")
+            }
+
+            if didLoadRailContent {
+                cacheHomeContent()
             }
         } else {
             monthlyStats = nil
@@ -265,6 +278,37 @@ final class HomeViewModel {
         traktDateParserWithFractionalSeconds.date(from: value) ?? traktDateParser.date(from: value)
     }
 
+    private func restoreCachedContentIfNeeded() {
+        if monthlyStats == nil {
+            monthlyStats = Self.cachedMonthlyStats()
+        }
+
+        guard let cached = Self.cachedHomeContent() else { return }
+
+        if recommendedMovies.isEmpty {
+            recommendedMovies = Array(cached.recommendedMovies.prefix(10))
+        }
+        if recommendedShows.isEmpty {
+            recommendedShows = Array(cached.recommendedShows.prefix(10))
+        }
+        if upNextItems.isEmpty {
+            upNextItems = Array(cached.upNextItems.prefix(10))
+        }
+        if startWatchingShows.isEmpty {
+            startWatchingShows = Array(cached.startWatchingShows.prefix(10))
+        }
+    }
+
+    private func cacheHomeContent() {
+        let snapshot = HomeContentSnapshot(
+            recommendedMovies: recommendedMovies,
+            recommendedShows: recommendedShows,
+            upNextItems: upNextItems,
+            startWatchingShows: startWatchingShows
+        )
+        Self.cacheHomeContent(snapshot)
+    }
+
     private static func cachedMonthlyStats() -> MonthlyWatchStats? {
         CacheService.getUserData(key: monthlyStatsCacheKey)?.data
     }
@@ -273,12 +317,29 @@ final class HomeViewModel {
         CacheService.setUserData(key: monthlyStatsCacheKey, data: stats)
     }
 
+    private static func cachedHomeContent() -> HomeContentSnapshot? {
+        CacheService.getUserData(key: homeContentCacheKey)?.data
+    }
+
+    private static func cacheHomeContent(_ snapshot: HomeContentSnapshot) {
+        CacheService.setUserData(key: homeContentCacheKey, data: snapshot)
+    }
+
+    private static let homeContentCacheKey = "home_content_snapshot"
+
     private static var monthlyStatsCacheKey: String {
         let components = Calendar.current.dateComponents([.year, .month], from: Date())
         let year = components.year ?? 0
         let month = components.month ?? 0
         return "home_monthly_stats_\(year)-\(month)"
     }
+}
+
+private struct HomeContentSnapshot: Codable {
+    let recommendedMovies: [MovieDTO]
+    let recommendedShows: [ShowDTO]
+    let upNextItems: [UpNextItemDTO]
+    let startWatchingShows: [ShowDTO]
 }
 
 struct MonthlyWatchStats: Codable {

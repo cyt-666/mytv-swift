@@ -125,15 +125,9 @@ struct DetailGenreCloud: View {
 }
 
 struct DetailCommentsSection: View {
-    let comments: [CommentDTO]
-    let isLoading: Bool
-    let isPosting: Bool
-    let errorMessage: String?
+    let store: CommentInteractionStore
     let isLoggedIn: Bool
-    @Binding var draft: String
-    @Binding var spoiler: Bool
     let onSubmit: () -> Void
-    let onRefresh: () -> Void
 
     var body: some View {
         DetailSectionCard(title: "评论") {
@@ -146,19 +140,19 @@ struct DetailCommentsSection: View {
                     Spacer()
 
                     Button {
-                        onRefresh()
+                        Task { await store.loadComments() }
                     } label: {
                         Image(systemName: "arrow.clockwise")
-                            .symbolEffect(.rotate, isActive: isLoading)
+                            .symbolEffect(.rotate, isActive: store.isLoadingComments)
                     }
                     .buttonStyle(.borderless)
-                    .disabled(isLoading)
+                    .disabled(store.isLoadingComments)
                     .help("刷新评论")
                 }
 
                 commentComposer
 
-                if let errorMessage {
+                if let errorMessage = store.commentErrorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 12, weight: .medium))
                         .foregroundStyle(.orange)
@@ -166,11 +160,11 @@ struct DetailCommentsSection: View {
 
                 Divider().opacity(0.45)
 
-                if isLoading && comments.isEmpty {
+                if store.isLoadingComments && store.comments.isEmpty {
                     ProgressView()
                         .controlSize(.small)
                         .frame(maxWidth: .infinity, minHeight: 80)
-                } else if comments.isEmpty {
+                } else if store.comments.isEmpty {
                     ContentUnavailableView(
                         "暂无评论",
                         systemImage: "bubble.left",
@@ -179,8 +173,29 @@ struct DetailCommentsSection: View {
                     .frame(maxWidth: .infinity, minHeight: 120)
                 } else {
                     VStack(spacing: 12) {
-                        ForEach(Array(comments.prefix(10))) { comment in
-                            DetailCommentRow(comment: comment)
+                        ForEach(store.comments) { comment in
+                            DetailCommentThreadView(
+                                comment: comment,
+                                store: store,
+                                isLoggedIn: isLoggedIn
+                            )
+                        }
+
+                        if store.canLoadMoreComments || store.isLoadingComments {
+                            Button {
+                                Task { await store.loadMoreComments() }
+                            } label: {
+                                if store.isLoadingComments {
+                                    ProgressView()
+                                        .controlSize(.small)
+                                } else {
+                                    Text("加载更多")
+                                }
+                            }
+                            .buttonStyle(.bordered)
+                            .controlSize(.small)
+                            .disabled(store.isLoadingComments || !store.canLoadMoreComments)
+                            .padding(.top, 4)
                         }
                     }
                 }
@@ -190,7 +205,10 @@ struct DetailCommentsSection: View {
 
     private var commentComposer: some View {
         VStack(alignment: .leading, spacing: 10) {
-            TextEditor(text: $draft)
+            TextEditor(text: Binding(
+                get: { store.commentDraft },
+                set: { store.commentDraft = $0 }
+            ))
                 .font(.system(size: 13))
                 .frame(minHeight: 86)
                 .padding(8)
@@ -202,21 +220,24 @@ struct DetailCommentsSection: View {
                         .stroke(.primary.opacity(0.06), lineWidth: 1)
                 }
                 .overlay(alignment: .topLeading) {
-                    if draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    if store.commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
                         Text(isLoggedIn ? "写一条 Trakt 评论..." : "登录 Trakt 后可以发布评论")
                             .font(.system(size: 13))
                             .foregroundStyle(.tertiary)
                             .padding(.horizontal, 14)
                             .padding(.vertical, 16)
-                            .allowsHitTesting(false)
+                        .allowsHitTesting(false)
                     }
                 }
-                .disabled(!isLoggedIn || isPosting)
+                .disabled(!isLoggedIn || store.isPostingComment)
 
             HStack(spacing: 12) {
-                Toggle("包含剧透", isOn: $spoiler)
+                Toggle("包含剧透", isOn: Binding(
+                    get: { store.commentHasSpoiler },
+                    set: { store.commentHasSpoiler = $0 }
+                ))
                     .toggleStyle(.checkbox)
-                    .disabled(!isLoggedIn || isPosting)
+                    .disabled(!isLoggedIn || store.isPostingComment)
 
                 Text("Trakt 通常要求评论至少 5 个词，200 词以上会作为 review。")
                     .font(.system(size: 11, weight: .medium))
@@ -228,7 +249,7 @@ struct DetailCommentsSection: View {
                 Button {
                     onSubmit()
                 } label: {
-                    if isPosting {
+                    if store.isPostingComment {
                         ProgressView()
                             .controlSize(.small)
                     } else {
@@ -241,12 +262,188 @@ struct DetailCommentsSection: View {
     }
 
     private var canSubmit: Bool {
-        isLoggedIn && !isPosting && !draft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+        isLoggedIn && !store.isPostingComment && !store.commentDraft.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty
+    }
+}
+
+private struct DetailCommentThreadView: View {
+    let comment: CommentDTO
+    let store: CommentInteractionStore
+    let isLoggedIn: Bool
+
+    @State private var showsReplies = false
+    @State private var showsReplyComposer = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            DetailCommentRow(
+                comment: comment,
+                likeCount: store.displayLikeCount(for: comment),
+                replyCount: store.displayReplyCount(for: comment)
+            )
+
+            HStack(spacing: 10) {
+                Button {
+                    Task { await store.toggleLike(for: comment) }
+                } label: {
+                    Label(
+                        store.isLiked(comment) ? "已赞" : "赞",
+                        systemImage: store.isLiked(comment) ? "hand.thumbsup.fill" : "hand.thumbsup"
+                    )
+                }
+                .disabled(!isLoggedIn || store.isLiking(comment))
+
+                if store.displayReplyCount(for: comment) > 0 {
+                    Button {
+                        showsReplies.toggle()
+                        if showsReplies && store.repliesByCommentId[comment.id] == nil {
+                            Task { await store.loadReplies(for: comment) }
+                        }
+                    } label: {
+                        Label(showsReplies ? "隐藏回复" : "查看回复", systemImage: "bubble.left.and.bubble.right")
+                    }
+                }
+
+                Button {
+                    showsReplyComposer.toggle()
+                } label: {
+                    Label("回复", systemImage: "arrowshape.turn.up.left")
+                }
+                .disabled(!isLoggedIn)
+            }
+            .font(.system(size: 12, weight: .semibold))
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .foregroundStyle(.secondary)
+            .padding(.horizontal, 2)
+
+            if showsReplyComposer {
+                replyComposer
+            }
+
+            if showsReplies {
+                repliesView
+            }
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.quaternary.opacity(0.32))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var replyComposer: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            TextEditor(text: Binding(
+                get: { store.replyDrafts[comment.id] ?? "" },
+                set: { store.replyDrafts[comment.id] = $0 }
+            ))
+            .font(.system(size: 13))
+            .frame(minHeight: 64)
+            .padding(8)
+            .scrollContentBackground(.hidden)
+            .background(.quaternary.opacity(0.35))
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay(alignment: .topLeading) {
+                if (store.replyDrafts[comment.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines).isEmpty {
+                    Text("回复 \(comment.displayName)...")
+                        .font(.system(size: 13))
+                        .foregroundStyle(.tertiary)
+                        .padding(.horizontal, 14)
+                        .padding(.vertical, 16)
+                        .allowsHitTesting(false)
+                }
+            }
+
+            HStack {
+                Toggle("包含剧透", isOn: Binding(
+                    get: { store.replySpoilers.contains(comment.id) },
+                    set: { value in
+                        if value {
+                            store.replySpoilers.insert(comment.id)
+                        } else {
+                            store.replySpoilers.remove(comment.id)
+                        }
+                    }
+                ))
+                .toggleStyle(.checkbox)
+
+                Spacer()
+
+                Button("取消") {
+                    showsReplyComposer = false
+                }
+                .buttonStyle(.borderless)
+
+                Button {
+                    Task {
+                        let posted = await store.postReply(to: comment)
+                        if posted {
+                            showsReplyComposer = false
+                            showsReplies = true
+                        }
+                    }
+                } label: {
+                    if store.isPostingReply(to: comment) {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        Text("回复")
+                    }
+                }
+                .disabled(replyText.isEmpty || store.isPostingReply(to: comment))
+            }
+            .font(.system(size: 12, weight: .medium))
+        }
+        .padding(12)
+        .background(.primary.opacity(0.035))
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var repliesView: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            if store.isLoadingReplies(for: comment) && (store.repliesByCommentId[comment.id] ?? []).isEmpty {
+                ProgressView()
+                    .controlSize(.small)
+                    .frame(maxWidth: .infinity, minHeight: 44)
+            } else {
+                ForEach(store.repliesByCommentId[comment.id] ?? []) { reply in
+                    DetailCommentRow(
+                        comment: reply,
+                        likeCount: store.displayLikeCount(for: reply),
+                        replyCount: store.displayReplyCount(for: reply)
+                    )
+                    .padding(.leading, 14)
+                }
+
+                if store.canLoadMoreReplies(for: comment) {
+                    Button {
+                        Task { await store.loadMoreReplies(for: comment) }
+                    } label: {
+                        if store.isLoadingReplies(for: comment) {
+                            ProgressView()
+                                .controlSize(.small)
+                        } else {
+                            Text("加载更多回复")
+                        }
+                    }
+                    .buttonStyle(.bordered)
+                    .controlSize(.small)
+                    .disabled(store.isLoadingReplies(for: comment))
+                    .padding(.leading, 14)
+                }
+            }
+        }
+    }
+
+    private var replyText: String {
+        (store.replyDrafts[comment.id] ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
     }
 }
 
 private struct DetailCommentRow: View {
     let comment: CommentDTO
+    let likeCount: Int
+    let replyCount: Int
     @State private var revealsSpoiler = false
 
     var body: some View {
@@ -267,11 +464,11 @@ private struct DetailCommentRow: View {
                     if comment.review == true {
                         Label("Review", systemImage: "text.bubble.fill")
                     }
-                    if let likes = comment.likes, likes > 0 {
-                        Label("\(likes)", systemImage: "hand.thumbsup.fill")
+                    if likeCount > 0 {
+                        Label("\(likeCount)", systemImage: "hand.thumbsup.fill")
                     }
-                    if let replies = comment.replies, replies > 0 {
-                        Label("\(replies)", systemImage: "arrowshape.turn.up.left.fill")
+                    if replyCount > 0 {
+                        Label("\(replyCount)", systemImage: "arrowshape.turn.up.left.fill")
                     }
                 }
                 .font(.system(size: 11, weight: .semibold))
@@ -297,9 +494,6 @@ private struct DetailCommentRow: View {
                     .fixedSize(horizontal: false, vertical: true)
             }
         }
-        .padding(14)
         .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.quaternary.opacity(0.32))
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
     }
 }

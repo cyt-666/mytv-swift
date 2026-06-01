@@ -121,7 +121,7 @@ struct HistoryItemDTO: Codable, Identifiable {
 }
 
 @MainActor enum CommentAPI {
-    static func movieComments(id: Int, sort: String = "newest", page: Int = 1, limit: Int = 10) async throws -> [CommentDTO] {
+    static func movieComments(id: Int, sort: String = "newest", page: Int = 1, limit: Int = 20) async throws -> [CommentDTO] {
         let cacheKey = "comments_movie_\(id)_\(sort)_p\(page)_l\(limit)"
         if let cached: [CommentDTO] = CacheService.getAPIResponse(key: cacheKey) {
             return cached
@@ -134,7 +134,7 @@ struct HistoryItemDTO: Codable, Identifiable {
         return result
     }
 
-    static func showComments(id: Int, sort: String = "newest", page: Int = 1, limit: Int = 10) async throws -> [CommentDTO] {
+    static func showComments(id: Int, sort: String = "newest", page: Int = 1, limit: Int = 20) async throws -> [CommentDTO] {
         let cacheKey = "comments_show_\(id)_\(sort)_p\(page)_l\(limit)"
         if let cached: [CommentDTO] = CacheService.getAPIResponse(key: cacheKey) {
             return cached
@@ -153,7 +153,7 @@ struct HistoryItemDTO: Codable, Identifiable {
         episodeNumber: Int,
         sort: String = "newest",
         page: Int = 1,
-        limit: Int = 10
+        limit: Int = 20
     ) async throws -> [CommentDTO] {
         let cacheKey = "comments_episode_\(showId)_s\(seasonNumber)_e\(episodeNumber)_\(sort)_p\(page)_l\(limit)"
         if let cached: [CommentDTO] = CacheService.getAPIResponse(key: cacheKey) {
@@ -161,6 +161,19 @@ struct HistoryItemDTO: Codable, Identifiable {
         }
         let result: [CommentDTO] = try await TraktAPIClient.shared.request(
             uri: "/shows/\(showId)/seasons/\(seasonNumber)/episodes/\(episodeNumber)/comments/\(sort)",
+            params: TraktEndpoint.makePagination(page: page, limit: limit)
+        )
+        CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
+        return result
+    }
+
+    static func commentReplies(id: Int, page: Int = 1, limit: Int = 10) async throws -> [CommentDTO] {
+        let cacheKey = "comments_replies_\(id)_p\(page)_l\(limit)"
+        if let cached: [CommentDTO] = CacheService.getAPIResponse(key: cacheKey) {
+            return cached
+        }
+        let result: [CommentDTO] = try await TraktAPIClient.shared.request(
+            uri: "/comments/\(id)/replies",
             params: TraktEndpoint.makePagination(page: page, limit: limit)
         )
         CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
@@ -206,6 +219,34 @@ struct HistoryItemDTO: Codable, Identifiable {
         )
     }
 
+    static func postReply(commentId: Int, comment: String, spoiler: Bool) async throws -> CommentDTO {
+        try await TraktAPIClient.shared.request(
+            method: "POST",
+            uri: "/comments/\(commentId)/replies",
+            body: [
+                "comment": comment,
+                "spoiler": spoiler
+            ],
+            requiresAuth: true
+        )
+    }
+
+    static func likeComment(id: Int) async throws {
+        let _: EmptyResponse = try await TraktAPIClient.shared.request(
+            method: "POST",
+            uri: "/comments/\(id)/like",
+            requiresAuth: true
+        )
+    }
+
+    static func unlikeComment(id: Int) async throws {
+        let _: EmptyResponse = try await TraktAPIClient.shared.request(
+            method: "DELETE",
+            uri: "/comments/\(id)/like",
+            requiresAuth: true
+        )
+    }
+
     static func message(for error: Error) -> String {
         if let apiError = error as? APIError {
             switch apiError {
@@ -216,7 +257,7 @@ struct HistoryItemDTO: Codable, Identifiable {
                 case 401:
                     return "登录 Trakt 后才能发布评论"
                 case 409:
-                    return "Trakt 认为这条评论已经发布过"
+                    return "Trakt 认为这个操作已经完成过"
                 case 422:
                     return "Trakt 没有接受这条评论，通常需要至少 5 个词"
                 default:

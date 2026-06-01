@@ -86,10 +86,10 @@ private struct UpNextRow: View {
                         .lineLimit(1)
 
                     // Progress bar
-                    ProgressView(value: Double(item.progress.completed), total: Double(max(item.progress.aired, 1)))
+                    ProgressView(value: Double(item.displayCompletedEpisodes), total: Double(item.displayAiredEpisodes))
                         .tint(.blue)
 
-                    Text("\(item.progress.completed)/\(item.progress.aired) 集已看")
+                    Text("\(item.displayCompletedEpisodes)/\(item.displayAiredEpisodes) 集已看")
                         .font(.caption2)
                         .foregroundStyle(.secondary)
                 }

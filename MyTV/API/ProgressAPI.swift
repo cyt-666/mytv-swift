@@ -46,6 +46,7 @@ enum ProgressAPI {
                         progress: ShowProgressSummaryDTO(
                             aired: progress.aired,
                             completed: progress.completed,
+                            inferredCompleted: inferredCompletedCount(progress: progress, watched: watched),
                             lastWatchedAt: progress.lastWatchedAt
                         )
                     )
@@ -59,6 +60,63 @@ enum ProgressAPI {
             return results.sorted { ($0.progress.lastWatchedAt ?? "") > ($1.progress.lastWatchedAt ?? "") }
         }
     }
+
+    private static func inferredCompletedCount(progress: ShowProgressDTO, watched: WatchedShowDTO) -> Int {
+        var candidates = [progress.completed]
+
+        if let watchedCount = watchedEpisodeCount(from: watched, resetAt: progress.resetAt) {
+            candidates.append(watchedCount)
+        }
+
+        if let lastEpisode = progress.lastEpisode {
+            if lastEpisode.season == progress.nextEpisode?.season || lastEpisode.season == 1 {
+                candidates.append(lastEpisode.number)
+            }
+        }
+
+        if let nextEpisode = progress.nextEpisode, nextEpisode.season == 1 {
+            candidates.append(max(nextEpisode.number - 1, 0))
+        }
+
+        return candidates.max() ?? progress.completed
+    }
+
+    private static func watchedEpisodeCount(from watched: WatchedShowDTO, resetAt: String?) -> Int? {
+        guard let seasons = watched.seasons else { return nil }
+
+        let resetDate = resetAt.flatMap(parseTraktDate)
+        var count = 0
+
+        for season in seasons where season.number > 0 {
+            for episode in season.episodes ?? [] where (episode.plays ?? 0) > 0 {
+                if let resetDate {
+                    guard
+                        let watchedAtString = episode.lastWatchedAt,
+                        let watchedAt = parseTraktDate(watchedAtString),
+                        watchedAt >= resetDate
+                    else {
+                        continue
+                    }
+                }
+
+                count += 1
+            }
+        }
+
+        return count
+    }
+
+    private static func parseTraktDate(_ value: String) -> Date? {
+        let fractionalParser = ISO8601DateFormatter()
+        fractionalParser.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        if let date = fractionalParser.date(from: value) {
+            return date
+        }
+
+        let parser = ISO8601DateFormatter()
+        parser.formatOptions = [.withInternetDateTime]
+        return parser.date(from: value)
+    }
 }
 
 // MARK: - DTOs for /users/me/watched/shows
@@ -66,12 +124,30 @@ enum ProgressAPI {
 struct WatchedShowDTO: Codable {
     let plays: Int?
     let lastWatchedAt: String?
+    let seasons: [WatchedSeasonDTO]?
     let show: ShowDTO
 
     enum CodingKeys: String, CodingKey {
         case plays
         case lastWatchedAt = "last_watched_at"
+        case seasons
         case show
+    }
+}
+
+struct WatchedSeasonDTO: Codable {
+    let number: Int
+    let episodes: [WatchedEpisodeDTO]?
+}
+
+struct WatchedEpisodeDTO: Codable {
+    let number: Int
+    let plays: Int?
+    let lastWatchedAt: String?
+
+    enum CodingKeys: String, CodingKey {
+        case number, plays
+        case lastWatchedAt = "last_watched_at"
     }
 }
 

@@ -4,10 +4,10 @@ enum MediaItem: Hashable, Identifiable {
     case movie(MovieDTO)
     case show(ShowDTO)
 
-    var id: Int {
+    var id: String {
         switch self {
-        case .movie(let m): return m.ids.trakt
-        case .show(let s): return s.ids.trakt
+        case .movie(let m): return "movie-\(m.ids.trakt)"
+        case .show(let s): return "show-\(s.ids.trakt)"
         }
     }
 
@@ -59,7 +59,7 @@ struct MediaCardView: View {
                 // Poster
                 ZStack(alignment: .topTrailing) {
                     AsyncPosterImage(urlString: item.posterURL)
-                        .aspectRatio(2/3, contentMode: .fill)
+                        .frame(width: 150, height: 225)
                         .clipShape(RoundedRectangle(cornerRadius: 8))
                         .shadow(color: .black.opacity(0.2), radius: 6, x: 0, y: 3)
 
@@ -68,6 +68,7 @@ struct MediaCardView: View {
                             .padding(6)
                     }
                 }
+                .frame(width: 150, height: 225)
 
                 // Title
                 Text(translation?.title ?? item.title)

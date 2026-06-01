@@ -10,6 +10,13 @@ struct BrowseView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 36)
+                } else if viewModel.items.isEmpty {
+                    ContentUnavailableView(
+                        "暂无结果",
+                        systemImage: "square.grid.2x2",
+                        description: Text("换一个类型或国家试试")
+                    )
+                    .frame(maxWidth: .infinity, minHeight: 360)
                 } else {
                     MediaGridView(items: viewModel.items.map { .movie($0) }) { _ in }
                         .padding(.horizontal, 20)
@@ -25,8 +32,8 @@ struct BrowseView: View {
                 HStack(spacing: 8) {
                     Picker("类型", selection: $viewModel.selectedGenre) {
                         Text("全部类型").tag("")
-                        ForEach(viewModel.genres, id: \.self) { genre in
-                            Text(genre).tag(genre)
+                        ForEach(viewModel.genres) { genre in
+                            Text(genre.title).tag(genre.value)
                         }
                     }
                     .pickerStyle(.menu)
@@ -34,8 +41,8 @@ struct BrowseView: View {
 
                     Picker("国家", selection: $viewModel.selectedCountry) {
                         Text("全部国家").tag("")
-                        ForEach(viewModel.countries, id: \.self) { country in
-                            Text(country).tag(country)
+                        ForEach(viewModel.countries) { country in
+                            Text(country.title).tag(country.value)
                         }
                     }
                     .pickerStyle(.menu)

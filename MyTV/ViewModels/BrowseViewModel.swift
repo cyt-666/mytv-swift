@@ -1,5 +1,12 @@
 import Foundation
 
+struct BrowseFilterOption: Hashable, Identifiable {
+    let title: String
+    let value: String
+
+    var id: String { value }
+}
+
 @Observable
 @MainActor
 final class BrowseViewModel {
@@ -9,14 +16,40 @@ final class BrowseViewModel {
     var isLoading = false
 
     let genres = [
-        "动作", "冒险", "动画", "喜剧", "犯罪", "纪录片", "剧情",
-        "家庭", "奇幻", "历史", "恐怖", "音乐", "悬疑", "浪漫",
-        "科幻", "电视电影", "惊悚", "战争", "西部"
+        BrowseFilterOption(title: "动作", value: "action"),
+        BrowseFilterOption(title: "冒险", value: "adventure"),
+        BrowseFilterOption(title: "动画", value: "animation"),
+        BrowseFilterOption(title: "喜剧", value: "comedy"),
+        BrowseFilterOption(title: "犯罪", value: "crime"),
+        BrowseFilterOption(title: "纪录片", value: "documentary"),
+        BrowseFilterOption(title: "剧情", value: "drama"),
+        BrowseFilterOption(title: "家庭", value: "family"),
+        BrowseFilterOption(title: "奇幻", value: "fantasy"),
+        BrowseFilterOption(title: "历史", value: "history"),
+        BrowseFilterOption(title: "恐怖", value: "horror"),
+        BrowseFilterOption(title: "音乐", value: "music"),
+        BrowseFilterOption(title: "悬疑", value: "mystery"),
+        BrowseFilterOption(title: "浪漫", value: "romance"),
+        BrowseFilterOption(title: "科幻", value: "science-fiction"),
+        BrowseFilterOption(title: "电视电影", value: "tv-movie"),
+        BrowseFilterOption(title: "惊悚", value: "thriller"),
+        BrowseFilterOption(title: "战争", value: "war"),
+        BrowseFilterOption(title: "西部", value: "western")
     ]
 
     let countries = [
-        "美国", "英国", "中国", "日本", "韩国", "法国", "德国",
-        "加拿大", "澳大利亚", "印度", "意大利", "西班牙"
+        BrowseFilterOption(title: "美国", value: "us"),
+        BrowseFilterOption(title: "英国", value: "gb"),
+        BrowseFilterOption(title: "中国", value: "cn"),
+        BrowseFilterOption(title: "日本", value: "jp"),
+        BrowseFilterOption(title: "韩国", value: "kr"),
+        BrowseFilterOption(title: "法国", value: "fr"),
+        BrowseFilterOption(title: "德国", value: "de"),
+        BrowseFilterOption(title: "加拿大", value: "ca"),
+        BrowseFilterOption(title: "澳大利亚", value: "au"),
+        BrowseFilterOption(title: "印度", value: "in"),
+        BrowseFilterOption(title: "意大利", value: "it"),
+        BrowseFilterOption(title: "西班牙", value: "es")
     ]
 
     func load() async {

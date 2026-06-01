@@ -30,6 +30,15 @@ struct HomeView: View {
                                 leadingBleed: sidebarOverlapInset,
                                 trailingInset: contentHorizontalPadding
                             )
+                        } else if viewModel.shouldShowRailPlaceholders {
+                            HomeRailPlaceholderView(
+                                title: "继续观看",
+                                icon: "play.circle.fill",
+                                iconColor: .orange,
+                                leadingInset: safeLeadingInset,
+                                leadingBleed: sidebarOverlapInset,
+                                trailingInset: contentHorizontalPadding
+                            )
                         }
 
                         // Start watching (watchlist ∩ collection)
@@ -37,6 +46,15 @@ struct HomeView: View {
                             MediaRailView(
                                 title: "开始观看",
                                 items: viewModel.startWatchingShows.map { .show($0) },
+                                icon: "play.fill",
+                                iconColor: .green,
+                                leadingInset: safeLeadingInset,
+                                leadingBleed: sidebarOverlapInset,
+                                trailingInset: contentHorizontalPadding
+                            )
+                        } else if viewModel.shouldShowRailPlaceholders {
+                            HomeRailPlaceholderView(
+                                title: "开始观看",
                                 icon: "play.fill",
                                 iconColor: .green,
                                 leadingInset: safeLeadingInset,
@@ -57,6 +75,15 @@ struct HomeView: View {
                                 leadingBleed: sidebarOverlapInset,
                                 trailingInset: contentHorizontalPadding
                             )
+                        } else if viewModel.shouldShowRailPlaceholders {
+                            HomeRailPlaceholderView(
+                                title: "推荐电影",
+                                icon: "hand.thumbsup.fill",
+                                iconColor: GlassDesign.accentBlue,
+                                leadingInset: safeLeadingInset,
+                                leadingBleed: sidebarOverlapInset,
+                                trailingInset: contentHorizontalPadding
+                            )
                         }
 
                         // Recommended shows
@@ -67,6 +94,15 @@ struct HomeView: View {
                                 icon: "heart.fill",
                                 iconColor: .red,
                                 onSeeAll: { appState.navigate(to: .recommendations(type: "shows")) },
+                                leadingInset: safeLeadingInset,
+                                leadingBleed: sidebarOverlapInset,
+                                trailingInset: contentHorizontalPadding
+                            )
+                        } else if viewModel.shouldShowRailPlaceholders {
+                            HomeRailPlaceholderView(
+                                title: "推荐剧集",
+                                icon: "heart.fill",
+                                iconColor: .red,
                                 leadingInset: safeLeadingInset,
                                 leadingBleed: sidebarOverlapInset,
                                 trailingInset: contentHorizontalPadding
@@ -363,6 +399,92 @@ private struct MonthlyRecentWatchRow: View {
     }
 }
 
+// MARK: - Loading Placeholders
+
+private struct HomeRailPlaceholderView: View {
+    let title: String
+    let icon: String
+    let iconColor: Color
+    var leadingInset: CGFloat = 0
+    var leadingBleed: CGFloat = 0
+    var trailingInset: CGFloat = 0
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 14) {
+            HStack(spacing: 8) {
+                Image(systemName: icon)
+                    .font(.system(size: 16, weight: .semibold))
+                    .foregroundStyle(iconColor.opacity(0.8))
+
+                Text(title)
+                    .font(.system(size: 20, weight: .bold))
+
+                Spacer()
+            }
+            .padding(.leading, leadingInset)
+            .padding(.trailing, trailingInset)
+
+            ScrollView(.horizontal, showsIndicators: false) {
+                LazyHStack(spacing: 20) {
+                    ForEach(0..<8, id: \.self) { index in
+                        HomePosterPlaceholder(index: index)
+                    }
+                }
+                .padding(.leading, leadingBleed + leadingInset)
+                .padding(.trailing, trailingInset)
+            }
+            .padding(.leading, -leadingBleed)
+            .scrollClipDisabled()
+            .allowsHitTesting(false)
+        }
+        .accessibilityLabel("\(title)正在加载")
+    }
+}
+
+private struct HomePosterPlaceholder: View {
+    let index: Int
+    @Environment(\.colorScheme) private var colorScheme
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .fill(.thinMaterial)
+                .overlay {
+                    RoundedRectangle(cornerRadius: 8, style: .continuous)
+                        .fill(placeholderFill.opacity(index.isMultiple(of: 2) ? 0.95 : 0.72))
+                }
+                .overlay {
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            .white.opacity(colorScheme == .dark ? 0.04 : 0.18),
+                            .clear
+                        ],
+                        startPoint: .topLeading,
+                        endPoint: .bottomTrailing
+                    )
+                }
+                .frame(width: 150, height: 225)
+
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(placeholderFill)
+                .frame(width: CGFloat(116 - (index % 3) * 18), height: 13)
+
+            RoundedRectangle(cornerRadius: 3, style: .continuous)
+                .fill(placeholderFill.opacity(0.72))
+                .frame(width: CGFloat(62 + (index % 2) * 16), height: 11)
+        }
+        .frame(width: 150, alignment: .leading)
+    }
+
+    private var placeholderFill: Color {
+        colorScheme == .dark
+            ? Color.white.opacity(0.12)
+            : Color.black.opacity(0.08)
+    }
+}
+
 // MARK: - Continue Watching Rail
 
 private struct ContinueWatchingRail: View {
@@ -454,7 +576,7 @@ private struct ContinueWatchingCard: View {
                     .frame(width: 160, alignment: .leading)
 
                 // Progress bar
-                ProgressView(value: Double(item.progress.completed), total: Double(max(item.progress.aired, 1)))
+                ProgressView(value: Double(item.displayCompletedEpisodes), total: Double(item.displayAiredEpisodes))
                     .tint(.blue)
                     .frame(width: 160)
             }

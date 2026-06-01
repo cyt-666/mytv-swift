@@ -184,24 +184,10 @@ struct ShowDetailView: View {
 
     private func commentsSection(viewModel: ShowDetailViewModel) -> some View {
         DetailCommentsSection(
-            comments: viewModel.comments,
-            isLoading: viewModel.isLoadingComments,
-            isPosting: viewModel.isPostingComment,
-            errorMessage: viewModel.commentErrorMessage,
+            store: viewModel.commentStore,
             isLoggedIn: viewModel.isLoggedIn,
-            draft: Binding(
-                get: { viewModel.commentDraft },
-                set: { viewModel.commentDraft = $0 }
-            ),
-            spoiler: Binding(
-                get: { viewModel.commentHasSpoiler },
-                set: { viewModel.commentHasSpoiler = $0 }
-            ),
             onSubmit: {
                 Task { await viewModel.postComment() }
-            },
-            onRefresh: {
-                Task { await viewModel.loadComments() }
             }
         )
     }
