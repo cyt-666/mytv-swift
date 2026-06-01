@@ -20,9 +20,9 @@ MyTV 是一个 macOS 上的 Trakt.tv 观影助手，使用 SwiftUI 构建。它�
 
 如果本机没有安装 XcodeGen，构建脚本会尝试通过 Homebrew 自动安装。
 
-## Trakt Client ID
+## 使用自己的 Trakt Client ID
 
-项目不会把 Trakt `client_id` 写进源码。构建时需要通过 `TRAKT_CLIENT_ID` 注入，并写入 app 的 `Info.plist`。
+MyTV 需要一个 Trakt API 应用的 `client_id` 才能完成登录和 API 请求。你可以在 Trakt 的 API 应用管理页面创建应用，并把获得的 `client_id` 配置为 `TRAKT_CLIENT_ID`。
 
 本地推荐使用 `.env.local`：
 
@@ -30,7 +30,7 @@ MyTV 是一个 macOS 上的 Trakt.tv 观影助手，使用 SwiftUI 构建。它�
 TRAKT_CLIENT_ID=your_client_id
 ```
 
-`.env.local` 已被 `.gitignore` 忽略，请不要把真实 `client_id`、`client_secret`、access token 或 refresh token 提交到仓库。
+`.env.local` 已被 `.gitignore` 忽略，适合放本机配置。请不要把 `client_secret`、access token 或 refresh token 提交到仓库。
 
 也可以在执行构建时临时传入：
 
