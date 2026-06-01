@@ -1,0 +1,89 @@
+# MyTV
+
+MyTV 是一个 macOS 上的 Trakt.tv 观影助手，使用 SwiftUI 构建。它可以浏览电影和剧集、查看详情、同步 Trakt 观看记录、观看清单、收藏、日历和评论等数据。
+
+## 功能
+
+- Trakt OAuth 登录，使用 PKCE 授权流程
+- 首页推荐、趋势、继续观看和本月观影统计
+- 电影、剧集、分类、搜索、日历等浏览入口
+- 观看清单、观看历史、我的片库和待看进度
+- 电影、剧集、季和单集详情页
+- Trakt 评论读取与发布
+- 图片和 API 响应缓存
+
+## 环境要求
+
+- macOS 15.0 或更高版本
+- Xcode 16 或更高版本
+- XcodeGen
+
+如果本机没有安装 XcodeGen，构建脚本会尝试通过 Homebrew 自动安装。
+
+## Trakt Client ID
+
+项目不会把 Trakt `client_id` 写进源码。构建时需要通过 `TRAKT_CLIENT_ID` 注入，并写入 app 的 `Info.plist`。
+
+本地推荐使用 `.env.local`：
+
+```bash
+TRAKT_CLIENT_ID=your_client_id
+```
+
+`.env.local` 已被 `.gitignore` 忽略，请不要把真实 `client_id`、`client_secret`、access token 或 refresh token 提交到仓库。
+
+也可以在执行构建时临时传入：
+
+```bash
+TRAKT_CLIENT_ID=your_client_id bash scripts/build.sh
+```
+
+## 本地构建
+
+生成 Xcode 项目并构建 Release 包：
+
+```bash
+bash scripts/build.sh
+```
+
+脚本会生成：
+
+- `build/Build/Products/Release/MyTV.app`
+- `build/Build/Products/Release/MyTV-macOS.dmg`
+- `build/Build/Products/Release/MyTV-macOS.zip`
+
+`build/` 是构建产物目录，已被 Git 忽略。
+
+## GitHub Actions
+
+CI 构建需要配置仓库变量：
+
+```text
+TRAKT_CLIENT_ID
+```
+
+如果你希望把它当作 secret 管理，可以把 workflow 中的 `vars.TRAKT_CLIENT_ID` 改为 `secrets.TRAKT_CLIENT_ID`。
+
+## 项目结构
+
+```text
+MyTV/
+  API/          Trakt API 请求封装
+  App/          应用入口、状态和常量
+  Components/   复用 UI 组件
+  Models/       SwiftData 模型和 DTO
+  Services/     认证、缓存、图片和翻译服务
+  Utilities/    窗口和视觉辅助工具
+  ViewModels/   页面状态与业务逻辑
+  Views/        SwiftUI 页面
+scripts/
+  build.sh      Release 构建、DMG 和 ZIP 打包脚本
+project.yml     XcodeGen 项目配置
+```
+
+## 安全说明
+
+- `client_id` 会在构建产物中出现，这是原生 OAuth 客户端的正常行为。
+- 不要在 macOS app、源码或 CI 日志中放置 `client_secret`。
+- 用户登录后的 access token 和 refresh token 不应提交到仓库。
+- 本地配置文件使用 `.env.local`，并确保它保持在 Git 忽略列表中。
