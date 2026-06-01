@@ -1,0 +1,9 @@
+build/
+DerivedData/
+*.dSYM/
+*.xcuserstate
+MyTV.xcodeproj/xcuserdata/
+MyTV.xcodeproj/project.xcworkspace/xcuserdata/
+.claude/
+.env
+.env.*
