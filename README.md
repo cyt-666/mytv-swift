@@ -56,13 +56,13 @@ bash scripts/build.sh
 
 ## GitHub Actions
 
-CI 构建需要配置仓库变量：
+CI 构建需要配置仓库 Secret：
 
 ```text
 TRAKT_CLIENT_ID
 ```
 
-如果你希望把它当作 secret 管理，可以把 workflow 中的 `vars.TRAKT_CLIENT_ID` 改为 `secrets.TRAKT_CLIENT_ID`。
+在 GitHub 仓库中进入 `Settings -> Secrets and variables -> Actions -> Secrets` 添加。不要放在 repository variables 里；workflow 只通过进程环境变量把它提供给 Xcode，避免 `xcodebuild` 命令行日志打印明文。
 
 ## 项目结构
 
@@ -85,5 +85,6 @@ project.yml     XcodeGen 项目配置
 
 - `client_id` 会在构建产物中出现，这是原生 OAuth 客户端的正常行为。
 - 不要在 macOS app、源码或 CI 日志中放置 `client_secret`。
+- CI 中的 `TRAKT_CLIENT_ID` 应配置为 GitHub Actions Secret，避免出现在执行日志中。
 - 用户登录后的 access token 和 refresh token 不应提交到仓库。
 - 本地配置文件使用 `.env.local`，并确保它保持在 Git 忽略列表中。

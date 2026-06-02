@@ -34,7 +34,7 @@ actor TraktAPIClient {
             "Content-Type": "application/json",
             "trakt-api-version": "2",
             "trakt-api-key": AppConstants.clientID,
-            "User-Agent": "MyTV-macOS/1.0"
+            "User-Agent": AppConstants.userAgent
         ]
         self.session = URLSession(configuration: config)
     }

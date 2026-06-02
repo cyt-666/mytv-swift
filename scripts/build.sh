@@ -38,7 +38,6 @@ xcodebuild -project "$PROJECT" \
     -configuration "$CONFIG" \
     -derivedDataPath "$BUILD_DIR" \
     -destination 'platform=macOS' \
-    TRAKT_CLIENT_ID="$TRAKT_CLIENT_ID" \
     CODE_SIGN_IDENTITY="-" \
     CODE_SIGNING_REQUIRED=YES \
     CODE_SIGNING_ALLOWED=YES \

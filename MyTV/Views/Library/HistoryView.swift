@@ -53,7 +53,8 @@ struct HistoryView: View {
 
 private struct HistoryRow: View {
     let item: HistoryItem
-    @State private var translation: TranslationResult?
+    @State private var titleTranslation: TranslationResult?
+    @State private var episodeTranslation: TranslationResult?
 
     var body: some View {
         HStack(spacing: 12) {
@@ -62,12 +63,20 @@ private struct HistoryRow: View {
                 .clipShape(RoundedRectangle(cornerRadius: 4))
 
             VStack(alignment: .leading, spacing: 4) {
-                Text(translation?.title ?? item.title)
+                Text(titleTranslation?.title ?? item.title)
                     .font(.body)
                     .lineLimit(1)
+
+                if let episodeLine = item.episodeLine(translatedTitle: episodeTranslation?.title) {
+                    Text(episodeLine)
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .lineLimit(1)
+                }
+
                 Text(item.watchedAt)
                     .font(.caption)
-                    .foregroundStyle(.secondary)
+                    .foregroundStyle(.tertiary)
             }
 
             Spacer()
@@ -85,9 +94,18 @@ private struct HistoryRow: View {
         .task {
             guard item.traktId > 0 else { return }
             if item.mediaType == "movie" {
-                translation = await TranslationService.shared.getMovieTranslation(id: item.traktId)
+                titleTranslation = await TranslationService.shared.getMovieTranslation(id: item.traktId)
+            } else if let seasonNumber = item.seasonNumber, let episodeNumber = item.episodeNumber {
+                async let showTranslation = TranslationService.shared.getShowTranslation(id: item.traktId)
+                async let translatedEpisode = TranslationService.shared.getEpisodeTranslation(
+                    showId: item.traktId,
+                    seasonNumber: seasonNumber,
+                    episodeNumber: episodeNumber
+                )
+                titleTranslation = await showTranslation
+                episodeTranslation = await translatedEpisode
             } else {
-                translation = await TranslationService.shared.getShowTranslation(id: item.traktId)
+                titleTranslation = await TranslationService.shared.getShowTranslation(id: item.traktId)
             }
         }
     }

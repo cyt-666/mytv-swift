@@ -8,7 +8,7 @@ on:
     branches: [main]
 
 env:
-  TRAKT_CLIENT_ID: ${{ vars.TRAKT_CLIENT_ID }}
+  TRAKT_CLIENT_ID: ${{ secrets.TRAKT_CLIENT_ID }}
 
 jobs:
   build:
@@ -25,9 +25,10 @@ jobs:
       - name: Validate Trakt client ID
         run: |
           if [ -z "$TRAKT_CLIENT_ID" ]; then
-            echo "TRAKT_CLIENT_ID repository variable is required"
+            echo "TRAKT_CLIENT_ID repository secret is required"
             exit 1
           fi
+          echo "::add-mask::$TRAKT_CLIENT_ID"
 
       - name: Build
         run: |
@@ -36,7 +37,6 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             -destination 'platform=macOS' \
-            TRAKT_CLIENT_ID="$TRAKT_CLIENT_ID" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES \
@@ -75,9 +75,10 @@ jobs:
       - name: Validate Trakt client ID
         run: |
           if [ -z "$TRAKT_CLIENT_ID" ]; then
-            echo "TRAKT_CLIENT_ID repository variable is required"
+            echo "TRAKT_CLIENT_ID repository secret is required"
             exit 1
           fi
+          echo "::add-mask::$TRAKT_CLIENT_ID"
 
       - name: Build
         run: |
@@ -86,7 +87,6 @@ jobs:
             -configuration Release \
             -derivedDataPath build \
             -destination 'platform=macOS' \
-            TRAKT_CLIENT_ID="$TRAKT_CLIENT_ID" \
             CODE_SIGN_IDENTITY="-" \
             CODE_SIGNING_REQUIRED=YES \
             CODE_SIGNING_ALLOWED=YES \

@@ -1,6 +1,21 @@
 import Foundation
 
 enum AppConstants {
+    // MARK: - App Metadata
+    static let version: String = {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleShortVersionString") as? String ?? "1.0"
+    }()
+
+    static let buildNumber: String = {
+        Bundle.main.object(forInfoDictionaryKey: "CFBundleVersion") as? String ?? "1"
+    }()
+
+    static let displayVersion: String = {
+        buildNumber.isEmpty || buildNumber == "1" ? version : "\(version) (\(buildNumber))"
+    }()
+
+    static let userAgent = "MyTV-macOS/\(version)"
+
     // MARK: - Trakt API
     static let clientID: String = {
         guard let value = Bundle.main.object(forInfoDictionaryKey: "TraktClientID") as? String,

@@ -47,7 +47,7 @@ struct SettingsView: View {
                     HStack {
                         Text("MyTV for macOS")
                         Spacer()
-                        Text("1.0.0")
+                        Text(AppConstants.displayVersion)
                             .foregroundStyle(.secondary)
                     }
                     .padding()
