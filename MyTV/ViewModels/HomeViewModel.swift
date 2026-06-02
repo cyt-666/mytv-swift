@@ -200,26 +200,32 @@ final class HomeViewModel {
     private func backgroundURL(for item: HistoryItemDTO) -> String? {
         switch item.type {
         case "movie":
-            return item.movie?.images?.fanart?.first
-                ?? item.movie?.images?.banner?.first
-                ?? item.movie?.images?.poster?.first
+            let images = item.movie?.images
+            if let url = images?.fanart?.first { return url }
+            if let url = images?.banner?.first { return url }
+            if let url = images?.poster?.first { return url }
+            return nil
         case "episode":
-            return item.show?.images?.fanart?.first
-                ?? item.episode?.images?.fanart?.first
-                ?? item.episode?.images?.screenshot?.first
-                ?? item.show?.images?.banner?.first
-                ?? item.show?.images?.poster?.first
+            let showImages = item.show?.images
+            let episodeImages = item.episode?.images
+            if let url = showImages?.fanart?.first { return url }
+            if let url = episodeImages?.fanart?.first { return url }
+            if let url = episodeImages?.screenshot?.first { return url }
+            if let url = showImages?.banner?.first { return url }
+            if let url = showImages?.poster?.first { return url }
+            return nil
         default:
             let movieImages = item.movie?.images
             let showImages = item.show?.images
             let episodeImages = item.episode?.images
 
-            return movieImages?.fanart?.first
-                ?? showImages?.fanart?.first
-                ?? episodeImages?.fanart?.first
-                ?? episodeImages?.screenshot?.first
-                ?? movieImages?.poster?.first
-                ?? showImages?.poster?.first
+            if let url = movieImages?.fanart?.first { return url }
+            if let url = showImages?.fanart?.first { return url }
+            if let url = episodeImages?.fanart?.first { return url }
+            if let url = episodeImages?.screenshot?.first { return url }
+            if let url = movieImages?.poster?.first { return url }
+            if let url = showImages?.poster?.first { return url }
+            return nil
         }
     }
 
