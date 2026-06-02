@@ -37,7 +37,7 @@ struct AsyncPosterImage: View {
         guard let url = URL(string: fullURL) else { return }
 
         // Check cache
-        if let cached = await ImageService.shared.getCached(for: url) {
+        if let cached = ImageService.shared.getCached(for: url) {
             self.image = cached
             return
         }

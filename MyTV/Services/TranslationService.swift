@@ -88,7 +88,7 @@ final class TranslationService {
 
         let task = Task<TranslationResult?, Never> {
             await semaphore.wait()
-            defer { Task { await semaphore.signal() } }
+            defer { Task { @MainActor in semaphore.signal() } }
             return await fetcher(key)
         }
         pendingRequests[key] = task

@@ -53,7 +53,7 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
         let code: String = try await runAuthSession(url: authURL, provider: self)
 
         let token = try await AuthAPI.getToken(code: code, codeVerifier: verifier)
-        try await persistToken(token)
+        try persistToken(token)
         await TraktAPIClient.shared.setAuthToken(token.accessToken)
         self.currentToken = token
         self.codeVerifier = nil
@@ -68,7 +68,7 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
             throw AuthError.noRefreshToken
         }
         let token = try await AuthAPI.refreshToken(refreshToken)
-        try await persistToken(token)
+        try persistToken(token)
         await TraktAPIClient.shared.setAuthToken(token.accessToken)
         self.currentToken = token
         self.isLoggedIn = true
@@ -98,7 +98,9 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
     // MARK: - ASWebAuthenticationPresentationContextProviding
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first ?? NSWindow()
+        MainActor.assumeIsolated {
+            NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first ?? NSWindow()
+        }
     }
 
     // MARK: - PKCE

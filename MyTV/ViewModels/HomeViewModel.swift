@@ -210,12 +210,16 @@ final class HomeViewModel {
                 ?? item.show?.images?.banner?.first
                 ?? item.show?.images?.poster?.first
         default:
-            return item.movie?.images?.fanart?.first
-                ?? item.show?.images?.fanart?.first
-                ?? item.episode?.images?.fanart?.first
-                ?? item.episode?.images?.screenshot?.first
-                ?? item.movie?.images?.poster?.first
-                ?? item.show?.images?.poster?.first
+            let movieImages = item.movie?.images
+            let showImages = item.show?.images
+            let episodeImages = item.episode?.images
+
+            return movieImages?.fanart?.first
+                ?? showImages?.fanart?.first
+                ?? episodeImages?.fanart?.first
+                ?? episodeImages?.screenshot?.first
+                ?? movieImages?.poster?.first
+                ?? showImages?.poster?.first
         }
     }
 

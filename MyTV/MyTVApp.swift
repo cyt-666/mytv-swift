@@ -28,9 +28,6 @@ struct MyTVApp: App {
                 .background(WindowAccessor { window in
                     window.backgroundColor = .clear
                     window.isOpaque = false
-                    if let toolbar = window.toolbar {
-                        toolbar.showsBaselineSeparator = false
-                    }
                 })
                 .onAppear {
                     let context = sharedModelContainer.mainContext

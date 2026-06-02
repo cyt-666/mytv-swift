@@ -1,12 +1,13 @@
 import AppKit
 
-actor ImageService {
+@MainActor
+final class ImageService {
     static let shared = ImageService()
 
     private let cache = NSCache<NSURL, NSImage>()
     private var inFlight: [URL: Task<NSImage?, Never>] = [:]
 
-    init() {
+    private init() {
         cache.countLimit = 200
         cache.totalCostLimit = 100 * 1024 * 1024 // 100MB
     }
