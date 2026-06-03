@@ -26,6 +26,62 @@ struct DetailMetaChip: View {
     }
 }
 
+struct DetailHeroArtworkView: View {
+    let urlString: String?
+    let height: CGFloat
+    var dimming: Double
+
+    var body: some View {
+        ZStack {
+            AsyncPosterImage(urlString: urlString)
+                .frame(maxWidth: .infinity)
+                .frame(height: height)
+                .saturation(0.92)
+                .brightness(-0.05)
+                .clipped()
+
+            Color.black.opacity(dimming)
+
+            LinearGradient(
+                colors: [
+                    .black.opacity(0.34),
+                    .black.opacity(0.10),
+                    .black.opacity(0.78)
+                ],
+                startPoint: .top,
+                endPoint: .bottom
+            )
+
+            LinearGradient(
+                colors: [
+                    .black.opacity(0.86),
+                    .black.opacity(0.32),
+                    .black.opacity(0.08),
+                    .black.opacity(0.20)
+                ],
+                startPoint: .leading,
+                endPoint: .trailing
+            )
+
+            VStack {
+                Spacer()
+                LinearGradient(
+                    colors: [
+                        .clear,
+                        Color(nsColor: .windowBackgroundColor).opacity(0.34)
+                    ],
+                    startPoint: .top,
+                    endPoint: .bottom
+                )
+                .frame(height: 74)
+            }
+        }
+        .frame(maxWidth: .infinity)
+        .frame(height: height)
+        .clipped()
+    }
+}
+
 struct DetailSectionCard<Content: View>: View {
     let title: String
     private let content: Content

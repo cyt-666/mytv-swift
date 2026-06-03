@@ -114,28 +114,7 @@ struct ShowDetailView: View {
         let backdropURL = show.images?.fanart?.first ?? show.images?.poster?.first
 
         return ZStack(alignment: .bottomLeading) {
-            AsyncPosterImage(urlString: backdropURL)
-                .frame(maxWidth: .infinity)
-                .frame(height: 420)
-                .clipped()
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            .black.opacity(0.42),
-                            .black.opacity(0.24),
-                            .black.opacity(0.82)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .overlay {
-                    LinearGradient(
-                        colors: [.black.opacity(0.70), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                }
+            DetailHeroArtworkView(urlString: backdropURL, height: 420, dimming: 0.18)
 
             HStack(alignment: .bottom, spacing: 24) {
                 AsyncPosterImage(urlString: show.images?.poster?.first)

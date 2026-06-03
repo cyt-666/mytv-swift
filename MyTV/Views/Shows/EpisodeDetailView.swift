@@ -120,31 +120,10 @@ struct EpisodeDetailView: View {
             ?? viewModel.show?.images?.poster?.first
 
         return ZStack(alignment: .bottomLeading) {
-            AsyncPosterImage(urlString: backdropURL)
-                .frame(maxWidth: .infinity)
-                .frame(height: 400)
-                .clipped()
-                .overlay {
-                    LinearGradient(
-                        colors: [
-                            .black.opacity(0.38),
-                            .black.opacity(0.22),
-                            .black.opacity(0.84)
-                        ],
-                        startPoint: .top,
-                        endPoint: .bottom
-                    )
-                }
-                .overlay {
-                    LinearGradient(
-                        colors: [.black.opacity(0.72), .clear],
-                        startPoint: .leading,
-                        endPoint: .trailing
-                    )
-                }
+            DetailHeroArtworkView(urlString: backdropURL, height: 400, dimming: 0.20)
 
             HStack(alignment: .bottom, spacing: 24) {
-                AsyncPosterImage(urlString: previewURL)
+                AsyncPosterImage(urlString: previewURL, contentMode: .fit)
                     .frame(width: 220, height: 124)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                     .overlay {

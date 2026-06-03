@@ -2,6 +2,7 @@ import SwiftUI
 
 struct AsyncPosterImage: View {
     let urlString: String?
+    var contentMode: ContentMode = .fill
     @State private var image: NSImage?
     @State private var isLoading = false
 
@@ -10,7 +11,7 @@ struct AsyncPosterImage: View {
             if let image {
                 Image(nsImage: image)
                     .resizable()
-                    .aspectRatio(contentMode: .fill)
+                    .aspectRatio(contentMode: contentMode)
             } else if isLoading {
                 Rectangle()
                     .fill(.quaternary)
