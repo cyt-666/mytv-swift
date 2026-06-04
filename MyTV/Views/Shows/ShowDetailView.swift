@@ -3,6 +3,7 @@ import SwiftUI
 struct ShowDetailView: View {
     let showId: Int
     @State private var viewModel: ShowDetailViewModel?
+    @State private var listActionViewModel = MediaListActionViewModel()
     @Environment(AppState.self) private var appState
 
     var body: some View {
@@ -152,6 +153,11 @@ struct ShowDetailView: View {
                             )
                         }
                     }
+
+                    MediaListActionMenu(
+                        target: .show(show.ids.trakt),
+                        viewModel: listActionViewModel
+                    )
                 }
                 .frame(maxWidth: 720, alignment: .leading)
             }

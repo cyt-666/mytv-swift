@@ -13,6 +13,8 @@ struct MoviesView: View {
                 } else {
                     MediaGridView(items: viewModel.items.map { .movie($0) }) { _ in }
                         .padding(.horizontal, 20)
+
+                    loadMoreTrigger
                 }
             }
             .padding(.top, 24)
@@ -23,14 +25,15 @@ struct MoviesView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("分类", selection: $viewModel.selectedTab) {
+                Picker("电影分类", selection: $viewModel.selectedTab) {
                     Text("热门").tag(MoviesViewModel.Tab.trending)
                     Text("流行").tag(MoviesViewModel.Tab.popular)
                     Text("即将上映").tag(MoviesViewModel.Tab.anticipated)
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.regular)
-                .frame(width: 300)
+                .labelsHidden()
+                .frame(width: 270)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -40,8 +43,30 @@ struct MoviesView: View {
                     Image(systemName: "arrow.clockwise")
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
                 }
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || viewModel.isLoadingMore)
                 .help("刷新")
+            }
+        }
+    }
+
+    private var loadMoreTrigger: some View {
+        Group {
+            if viewModel.canLoadMore {
+                HStack {
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                            .opacity(0)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .onAppear {
+                    Task { await viewModel.loadMoreIfNeeded() }
+                }
             }
         }
     }

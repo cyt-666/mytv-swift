@@ -183,6 +183,12 @@ enum CacheService {
         try? modelContext.save()
     }
 
+    @MainActor static func clearAPIResponses(containing text: String) {
+        guard let modelContext else { return }
+        try? modelContext.delete(model: APIResponseCache.self, where: #Predicate { $0.key.contains(text) })
+        try? modelContext.save()
+    }
+
     // MARK: - Session invalidation
 
     /// Mark user data caches as stale so SWR triggers a background refresh on next read

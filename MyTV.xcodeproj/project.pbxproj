@@ -34,6 +34,7 @@
 		3012293543DD36A8FAA51E78 /* LoadingStateView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5655C8CFC36AC409FA903ABC /* LoadingStateView.swift */; };
 		310BB974A896197DBB82FF92 /* WatchlistViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 422490629D1EE282C1714A84 /* WatchlistViewModel.swift */; };
 		3193EBB84744A06AC31B9BCD /* SettingsView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 2B2A8A92DE5AB819F7CB7631 /* SettingsView.swift */; };
+		340A06E913A07E30903780B8 /* MediaListActionViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 9EAFB808CE5639CFB1F1A9FA /* MediaListActionViewModel.swift */; };
 		38EC9CDB2585ED7260A33588 /* Assets.xcassets in Resources */ = {isa = PBXBuildFile; fileRef = 57A2CB395ECC4FB7B7320DD4 /* Assets.xcassets */; };
 		3C26B5E863AAA06B2AFA5D0E /* BackdropImageView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 65E50B1485B566F812F2E04B /* BackdropImageView.swift */; };
 		3C81AC29C79FEFB9AF867011 /* HistoryViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 22E185F9C4C33AB7298B5844 /* HistoryViewModel.swift */; };
@@ -77,6 +78,7 @@
 		CB3819E1839A4F465DD7D9C4 /* CalendarDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = ABFDE6975CC9BDC3C592636B /* CalendarDTO.swift */; };
 		D07561664D5024DCCF78B9E5 /* TraktEndpoint.swift in Sources */ = {isa = PBXBuildFile; fileRef = 1F2865E12B395D9C6171E921 /* TraktEndpoint.swift */; };
 		D2F1DD0A0842A9E20A8BED10 /* TokenDTO.swift in Sources */ = {isa = PBXBuildFile; fileRef = 20FBE0863080C7916F633944 /* TokenDTO.swift */; };
+		D5063BBE0535023E49FE0B95 /* ListAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = 5ED9DA1C4CEBF2C4BB43C630 /* ListAPI.swift */; };
 		D69F95A5E925BD61F1D9D907 /* GlassDesign.swift in Sources */ = {isa = PBXBuildFile; fileRef = 48D4E895F0B68D255C2D89F1 /* GlassDesign.swift */; };
 		D896DF35976157528E162682 /* ContentView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8B40424239D6D9CA7474608A /* ContentView.swift */; };
 		DED6E13A3D0749367F468462 /* HomeView.swift in Sources */ = {isa = PBXBuildFile; fileRef = 849D6BDE17350812D22DAF1B /* HomeView.swift */; };
@@ -120,6 +122,7 @@
 		5655C8CFC36AC409FA903ABC /* LoadingStateView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = LoadingStateView.swift; sourceTree = "<group>"; };
 		57A2CB395ECC4FB7B7320DD4 /* Assets.xcassets */ = {isa = PBXFileReference; lastKnownFileType = folder.assetcatalog; path = Assets.xcassets; sourceTree = "<group>"; };
 		5D636EBD0B11B81C14A447B2 /* SeasonDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SeasonDetailViewModel.swift; sourceTree = "<group>"; };
+		5ED9DA1C4CEBF2C4BB43C630 /* ListAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ListAPI.swift; sourceTree = "<group>"; };
 		5F27F75E4AC262B201E494E2 /* ProgressDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ProgressDTO.swift; sourceTree = "<group>"; };
 		609B971B7046ABB22A299120 /* UserDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDTO.swift; sourceTree = "<group>"; };
 		65E291FEC28438A58B57A5F5 /* MoviesView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MoviesView.swift; sourceTree = "<group>"; };
@@ -151,6 +154,7 @@
 		938ADDB1BD0E4720CAF9E6EB /* MyTV.entitlements */ = {isa = PBXFileReference; lastKnownFileType = text.plist.entitlements; path = MyTV.entitlements; sourceTree = "<group>"; };
 		9C2B7E449AC2D74FCE481219 /* UserDataCache.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = UserDataCache.swift; sourceTree = "<group>"; };
 		9E4878E76A1822D1917786F9 /* ShowDTO.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowDTO.swift; sourceTree = "<group>"; };
+		9EAFB808CE5639CFB1F1A9FA /* MediaListActionViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MediaListActionViewModel.swift; sourceTree = "<group>"; };
 		A32F5786F34BF87742353FB3 /* RatingBadgeView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = RatingBadgeView.swift; sourceTree = "<group>"; };
 		A567922F555ED66152FCEC9F /* MyTV.app */ = {isa = PBXFileReference; explicitFileType = wrapper.application; includeInIndex = 0; path = MyTV.app; sourceTree = BUILT_PRODUCTS_DIR; };
 		A599A14C601CFCF741C3CC35 /* CalendarViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = CalendarViewModel.swift; sourceTree = "<group>"; };
@@ -287,6 +291,7 @@
 				4964279DFC5FC568066CAD69 /* EpisodeDetailViewModel.swift */,
 				22E185F9C4C33AB7298B5844 /* HistoryViewModel.swift */,
 				6E5AAE258CC0AC86D1BC7C5B /* HomeViewModel.swift */,
+				9EAFB808CE5639CFB1F1A9FA /* MediaListActionViewModel.swift */,
 				6C9A16AFE6AD4EEFA236D4E2 /* MovieDetailViewModel.swift */,
 				B3DE71FC31E261BB282FBD60 /* MoviesViewModel.swift */,
 				DD58595F21ACE8174DDEA5C3 /* ProfileViewModel.swift */,
@@ -325,6 +330,7 @@
 			children = (
 				1BFA8BC9B5ABEFAD63DC7018 /* AuthAPI.swift */,
 				EBF8FA02249E5BCE55CCE2A6 /* CalendarAPI.swift */,
+				5ED9DA1C4CEBF2C4BB43C630 /* ListAPI.swift */,
 				C8CB0A137BBBCBD678F82A81 /* MovieAPI.swift */,
 				85ABFB83287A73F6E0710A5E /* ProgressAPI.swift */,
 				C24F47C31B7FFA0779038A42 /* RecommendationAPI.swift */,
@@ -556,12 +562,14 @@
 				DED6E13A3D0749367F468462 /* HomeView.swift in Sources */,
 				81890809E96132C707BEBDE4 /* HomeViewModel.swift in Sources */,
 				040F894B0DEAD64824E30873 /* ImageService.swift in Sources */,
+				D5063BBE0535023E49FE0B95 /* ListAPI.swift in Sources */,
 				3012293543DD36A8FAA51E78 /* LoadingStateView.swift in Sources */,
 				6A85BA1539609EB8E0873B65 /* LoginWebView.swift in Sources */,
 				40F4CBD41D8C5073302BF389 /* MediaCache.swift in Sources */,
 				06F1AD1C9B27E3C3E8F77E9A /* MediaCardView.swift in Sources */,
 				B420967927C459D5342EB418 /* MediaDetailComponents.swift in Sources */,
 				6B9E40FB9C20B0B54E9F560E /* MediaGridView.swift in Sources */,
+				340A06E913A07E30903780B8 /* MediaListActionViewModel.swift in Sources */,
 				E70250071BBFE29DFCEF3093 /* MediaRailView.swift in Sources */,
 				0857D9E98C583EF5E1D19CA2 /* MovieAPI.swift in Sources */,
 				C13AB2296810ADF34E963C9D /* MovieDTO.swift in Sources */,
@@ -750,7 +758,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
@@ -772,7 +780,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.1;
+				MARKETING_VERSION = 1.0.2;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;

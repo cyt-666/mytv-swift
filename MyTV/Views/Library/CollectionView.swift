@@ -24,13 +24,14 @@ struct CollectionView: View {
         .onChange(of: viewModel.mediaType) { _, _ in Task { await viewModel.load() } }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("类型", selection: $viewModel.mediaType) {
+                Picker("片库类型", selection: $viewModel.mediaType) {
                     Text("电影").tag("movies")
                     Text("剧集").tag("shows")
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.regular)
-                .frame(width: 180)
+                .labelsHidden()
+                .frame(width: 140)
             }
 
             ToolbarItem(placement: .primaryAction) {

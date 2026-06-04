@@ -23,24 +23,46 @@ import Foundation
         return try await TraktAPIClient.shared.request(method: "POST", uri: "/sync/collection/remove", body: body, requiresAuth: true)
     }
 
-    static func addToWatchlist(movies: [Int]? = nil, shows: [Int]? = nil) async throws -> SyncDTO {
+    static func addToWatchlist(
+        movies: [Int]? = nil,
+        shows: [Int]? = nil,
+        seasons: [Int]? = nil,
+        episodes: [Int]? = nil
+    ) async throws -> SyncDTO {
         var body: [String: Any] = [:]
         if let movies {
             body["movies"] = movies.map { ["ids": ["trakt": $0]] }
         }
         if let shows {
             body["shows"] = shows.map { ["ids": ["trakt": $0]] }
+        }
+        if let seasons {
+            body["seasons"] = seasons.map { ["ids": ["trakt": $0]] }
+        }
+        if let episodes {
+            body["episodes"] = episodes.map { ["ids": ["trakt": $0]] }
         }
         return try await TraktAPIClient.shared.request(method: "POST", uri: "/sync/watchlist", body: body, requiresAuth: true)
     }
 
-    static func removeFromWatchlist(movies: [Int]? = nil, shows: [Int]? = nil) async throws -> SyncDTO {
+    static func removeFromWatchlist(
+        movies: [Int]? = nil,
+        shows: [Int]? = nil,
+        seasons: [Int]? = nil,
+        episodes: [Int]? = nil
+    ) async throws -> SyncDTO {
         var body: [String: Any] = [:]
         if let movies {
             body["movies"] = movies.map { ["ids": ["trakt": $0]] }
         }
         if let shows {
             body["shows"] = shows.map { ["ids": ["trakt": $0]] }
+        }
+        if let seasons {
+            body["seasons"] = seasons.map { ["ids": ["trakt": $0]] }
+        }
+        if let episodes {
+            body["episodes"] = episodes.map { ["ids": ["trakt": $0]] }
         }
         return try await TraktAPIClient.shared.request(method: "POST", uri: "/sync/watchlist/remove", body: body, requiresAuth: true)
     }

@@ -13,6 +13,8 @@ struct ShowsView: View {
                 } else {
                     MediaGridView(items: viewModel.items.map { .show($0) }) { _ in }
                         .padding(.horizontal, 20)
+
+                    loadMoreTrigger
                 }
             }
             .padding(.top, 24)
@@ -23,14 +25,15 @@ struct ShowsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("分类", selection: $viewModel.selectedTab) {
+                Picker("剧集分类", selection: $viewModel.selectedTab) {
                     Text("热门").tag(ShowsViewModel.Tab.trending)
                     Text("流行").tag(ShowsViewModel.Tab.popular)
-                    Text("即将上映").tag(ShowsViewModel.Tab.anticipated)
+                    Text("即将播出").tag(ShowsViewModel.Tab.anticipated)
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.regular)
-                .frame(width: 300)
+                .labelsHidden()
+                .frame(width: 270)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -40,8 +43,30 @@ struct ShowsView: View {
                     Image(systemName: "arrow.clockwise")
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
                 }
-                .disabled(viewModel.isLoading)
+                .disabled(viewModel.isLoading || viewModel.isLoadingMore)
                 .help("刷新")
+            }
+        }
+    }
+
+    private var loadMoreTrigger: some View {
+        Group {
+            if viewModel.canLoadMore {
+                HStack {
+                    if viewModel.isLoadingMore {
+                        ProgressView()
+                            .controlSize(.small)
+                    } else {
+                        ProgressView()
+                            .controlSize(.small)
+                            .opacity(0)
+                    }
+                }
+                .frame(maxWidth: .infinity)
+                .padding(.vertical, 16)
+                .onAppear {
+                    Task { await viewModel.loadMoreIfNeeded() }
+                }
             }
         }
     }

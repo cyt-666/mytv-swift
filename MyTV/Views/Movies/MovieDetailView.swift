@@ -3,6 +3,7 @@ import SwiftUI
 struct MovieDetailView: View {
     let movieId: Int
     @State private var viewModel: MovieDetailViewModel?
+    @State private var listActionViewModel = MediaListActionViewModel()
 
     var body: some View {
         Group {
@@ -136,6 +137,11 @@ struct MovieDetailView: View {
                             )
                         }
                     }
+
+                    MediaListActionMenu(
+                        target: .movie(movie.ids.trakt),
+                        viewModel: listActionViewModel
+                    )
                 }
                 .frame(maxWidth: 720, alignment: .leading)
             }

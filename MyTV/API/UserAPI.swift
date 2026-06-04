@@ -70,6 +70,19 @@ import Foundation
         return result
     }
 
+    static func customLists(username: String) async throws -> [TraktListDTO] {
+        let cacheKey = "user_lists_\(username)"
+        if let cached: [TraktListDTO] = CacheService.getAPIResponse(key: cacheKey) {
+            return cached
+        }
+        let result: [TraktListDTO] = try await TraktAPIClient.shared.request(
+            uri: "/users/\(username)/lists",
+            requiresAuth: true
+        )
+        CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
+        return result
+    }
+
     static func history(
         type: String? = nil,
         page: Int = 1,
@@ -102,6 +115,26 @@ import Foundation
         CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
         return result
     }
+}
+
+struct TraktListDTO: Codable, Identifiable, Hashable {
+    let name: String
+    let description: String?
+    let privacy: String?
+    let itemCount: Int?
+    let ids: TraktListIdsDTO
+
+    var id: Int { ids.trakt }
+
+    enum CodingKeys: String, CodingKey {
+        case name, description, privacy, ids
+        case itemCount = "item_count"
+    }
+}
+
+struct TraktListIdsDTO: Codable, Hashable {
+    let trakt: Int
+    let slug: String?
 }
 
 struct HistoryItemDTO: Codable, Identifiable {

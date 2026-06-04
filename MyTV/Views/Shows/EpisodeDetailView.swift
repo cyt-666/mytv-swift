@@ -5,6 +5,7 @@ struct EpisodeDetailView: View {
     let seasonNumber: Int
     let episodeNumber: Int
     @State private var viewModel: EpisodeDetailViewModel?
+    @State private var listActionViewModel = MediaListActionViewModel()
     @Environment(AppState.self) private var appState
 
     var body: some View {
@@ -165,6 +166,11 @@ struct EpisodeDetailView: View {
                             )
                         }
                     }
+
+                    MediaListActionMenu(
+                        target: .episode(episode.ids.trakt),
+                        viewModel: listActionViewModel
+                    )
                 }
                 .frame(maxWidth: 760, alignment: .leading)
             }

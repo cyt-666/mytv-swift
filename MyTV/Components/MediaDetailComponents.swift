@@ -26,6 +26,336 @@ struct DetailMetaChip: View {
     }
 }
 
+struct MediaListActionMenu: View {
+    let target: MediaListTarget?
+    let viewModel: MediaListActionViewModel
+    var prominent = true
+    var iconOnly = false
+    @State private var isShowingSheet = false
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Button {
+                isShowingSheet = true
+            } label: {
+                if iconOnly {
+                    Image(systemName: viewModel.actionIcon)
+                        .font(.system(size: 15, weight: .semibold))
+                        .foregroundStyle(viewModel.hasJoinedList ? .green : .primary)
+                        .frame(width: 30, height: 28)
+                } else {
+                    Label(viewModel.actionTitle, systemImage: viewModel.actionIcon)
+                        .font(.system(size: 14, weight: .bold))
+                        .foregroundStyle(prominent ? .white : .primary)
+                        .padding(.horizontal, prominent ? 16 : 13)
+                        .padding(.vertical, prominent ? 9 : 7)
+                        .background(actionBackground)
+                        .clipShape(Capsule())
+                        .overlay {
+                            Capsule()
+                                .stroke((prominent ? Color.white : Color.primary).opacity(0.20), lineWidth: 1)
+                        }
+                        .shadow(color: prominent ? .black.opacity(0.26) : .clear, radius: 10, y: 5)
+                }
+            }
+            .buttonStyle(.plain)
+            .fixedSize()
+            .disabled(target == nil || viewModel.isSubmitting)
+            .help(viewModel.hasJoinedList ? "管理观看清单和自定义列表" : "加入观看清单或自定义列表")
+            .sheet(isPresented: $isShowingSheet) {
+                MediaListActionSheet(target: target, viewModel: viewModel)
+                    .frame(width: 460)
+            }
+            .task(id: target) {
+                await viewModel.loadStateIfNeeded(for: target)
+            }
+
+            if !iconOnly {
+                if let message = viewModel.message {
+                    Label(message, systemImage: "checkmark.circle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.green)
+                }
+
+                if let errorMessage = viewModel.errorMessage {
+                    Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                        .font(.system(size: 12, weight: .semibold))
+                        .foregroundStyle(.orange)
+                }
+            }
+        }
+    }
+
+    @ViewBuilder
+    private var actionBackground: some View {
+        if prominent {
+            Capsule()
+                .fill((viewModel.hasJoinedList ? Color.green : Color.accentColor).gradient)
+        } else {
+            Capsule()
+                .fill(.thinMaterial)
+        }
+    }
+}
+
+private struct MediaListActionSheet: View {
+    let target: MediaListTarget?
+    let viewModel: MediaListActionViewModel
+    @Environment(\.dismiss) private var dismiss
+    @State private var newListName = ""
+    @State private var newListDescription = ""
+    @State private var privacy = "private"
+    @State private var displayNumbers = false
+    @State private var allowComments = true
+
+    private let privacyOptions = [
+        ("private", "私密"),
+        ("friends", "好友可见"),
+        ("public", "公开")
+    ]
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(viewModel.hasJoinedList ? "管理列表" : "加入列表")
+                        .font(.system(size: 22, weight: .bold))
+                    Text(viewModel.hasJoinedList ? "当前条目已加入至少一个列表，可继续加入其他列表。" : "选择观看清单、自定义列表，或新建一个列表。")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .background(.thinMaterial)
+                .clipShape(Circle())
+            }
+
+            if let target {
+                if viewModel.isLoggedIn {
+                    actionButton(
+                        title: viewModel.isInWatchlist ? "观看清单" : target.watchlistLabel,
+                        icon: viewModel.isInWatchlist ? "bookmark.fill" : "bookmark",
+                        isAdded: viewModel.isInWatchlist,
+                        addedLabel: viewModel.isInWatchlist ? "移除" : nil,
+                        isDestructiveAction: viewModel.isInWatchlist
+                    ) {
+                        if viewModel.isInWatchlist {
+                            await viewModel.removeFromWatchlist(target)
+                        } else {
+                            await viewModel.addToWatchlist(target)
+                        }
+                    }
+
+                    Divider()
+
+                    VStack(alignment: .leading, spacing: 10) {
+                        sectionTitle("自定义列表")
+
+                        if viewModel.isLoadingLists {
+                            HStack(spacing: 8) {
+                                ProgressView()
+                                    .controlSize(.small)
+                                Text("正在加载列表...")
+                                    .foregroundStyle(.secondary)
+                            }
+                            .frame(maxWidth: .infinity, alignment: .leading)
+                            .padding(12)
+                            .background(.thinMaterial)
+                            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else if viewModel.lists.isEmpty {
+                            Text("暂无自定义列表，可以在下面新建一个。")
+                                .font(.system(size: 13, weight: .medium))
+                                .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+                                .padding(12)
+                                .background(.thinMaterial)
+                                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        } else {
+                            LazyVStack(spacing: 8) {
+                                ForEach(viewModel.lists) { list in
+                                    let isAdded = viewModel.isAdded(to: list)
+                                    actionButton(
+                                        title: list.name,
+                                        subtitle: list.description,
+                                        icon: isAdded ? "checkmark.circle.fill" : "list.bullet",
+                                        isAdded: isAdded,
+                                        addedLabel: isAdded ? "移除" : nil,
+                                        isDestructiveAction: isAdded
+                                    ) {
+                                        await viewModel.toggle(target, in: list)
+                                    }
+                                }
+                            }
+                            .frame(maxHeight: 190)
+                        }
+                    }
+
+                    Divider()
+
+                    newListForm(target: target)
+                } else {
+                    Label("登录 Trakt 后才能加入观看清单或自定义列表", systemImage: "person.crop.circle.badge.exclamationmark")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                }
+            } else {
+                Label("条目信息还在加载", systemImage: "hourglass")
+                    .font(.system(size: 14, weight: .semibold))
+                    .foregroundStyle(.secondary)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .padding(14)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            if let message = viewModel.message {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.green)
+            }
+
+            if let errorMessage = viewModel.errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 13, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+        }
+        .padding(22)
+        .task(id: target) {
+            await viewModel.loadStateIfNeeded(for: target)
+        }
+    }
+
+    private func sectionTitle(_ title: String) -> some View {
+        Text(title)
+            .font(.system(size: 13, weight: .bold))
+            .foregroundStyle(.secondary)
+    }
+
+    private func actionButton(
+        title: String,
+        subtitle: String? = nil,
+        icon: String,
+        isAdded: Bool = false,
+        addedLabel: String? = nil,
+        isDestructiveAction: Bool = false,
+        action: @escaping () async -> Void
+    ) -> some View {
+        Button {
+            Task { await action() }
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(isAdded ? .green : Color.accentColor)
+                    .frame(width: 26, height: 26)
+                    .background((isAdded ? Color.green : Color.accentColor).opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 3) {
+                    Text(title)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(1)
+                    if let subtitle, !subtitle.isEmpty {
+                        Text(subtitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                            .lineLimit(1)
+                    }
+                }
+
+                Spacer()
+
+                if isAdded {
+                    Text(addedLabel ?? "已加入")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(isDestructiveAction ? .orange : .green)
+                } else {
+                    Image(systemName: "plus")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .padding(12)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(isAdded ? Color.green.opacity(0.08) : Color.clear)
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(isAdded ? Color.green.opacity(0.24) : Color.primary.opacity(0.07), lineWidth: 1)
+            }
+        }
+        .buttonStyle(.plain)
+        .disabled(viewModel.isSubmitting)
+    }
+
+    private func newListForm(target: MediaListTarget) -> some View {
+        VStack(alignment: .leading, spacing: 10) {
+            sectionTitle("新建列表并加入")
+
+            TextField("列表名称", text: $newListName)
+                .textFieldStyle(.roundedBorder)
+
+            TextField("描述（可选）", text: $newListDescription, axis: .vertical)
+                .textFieldStyle(.roundedBorder)
+                .lineLimit(2...3)
+
+            Picker("可见性", selection: $privacy) {
+                ForEach(privacyOptions, id: \.0) { value, label in
+                    Text(label).tag(value)
+                }
+            }
+            .pickerStyle(.menu)
+
+            HStack(spacing: 16) {
+                Toggle("显示编号", isOn: $displayNumbers)
+                Toggle("允许评论", isOn: $allowComments)
+            }
+            .font(.system(size: 13, weight: .medium))
+
+            Button {
+                Task {
+                    let didCreate = await viewModel.createListAndAdd(
+                        target,
+                        name: newListName,
+                        description: newListDescription,
+                        privacy: privacy,
+                        displayNumbers: displayNumbers,
+                        allowComments: allowComments
+                    )
+                    if didCreate {
+                        newListName = ""
+                        newListDescription = ""
+                        privacy = "private"
+                        displayNumbers = false
+                        allowComments = true
+                    }
+                }
+            } label: {
+                Label(viewModel.isSubmitting ? "创建中..." : "创建并加入", systemImage: "plus.circle.fill")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(viewModel.isSubmitting || newListName.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty)
+        }
+    }
+}
+
 struct DetailHeroArtworkView: View {
     let urlString: String?
     let height: CGFloat

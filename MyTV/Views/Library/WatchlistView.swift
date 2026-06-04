@@ -6,12 +6,18 @@ struct WatchlistView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                filterBar
+                    .padding(.horizontal, 20)
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 36)
+                } else if let errorMessage = viewModel.errorMessage, viewModel.items.isEmpty {
+                    ContentUnavailableView(errorMessage, systemImage: "exclamationmark.triangle", description: Text("请稍后重试或检查 Trakt 登录状态"))
+                        .padding(.top, 36)
                 } else if viewModel.items.isEmpty {
-                    ContentUnavailableView("暂无观看清单", systemImage: "bookmark", description: Text("收藏的电影和剧集会显示在这里"))
+                    ContentUnavailableView(viewModel.emptyTitle, systemImage: viewModel.source == .customList ? "list.bullet.rectangle" : "bookmark", description: Text(viewModel.emptyDescription))
                         .padding(.top, 36)
                 } else {
                     MediaGridView(items: viewModel.items) { _ in }
@@ -21,21 +27,30 @@ struct WatchlistView: View {
             .padding(.top, 24)
         }
         .task { await viewModel.load() }
+        .onChange(of: viewModel.source) { _, _ in
+            Task { await viewModel.load() }
+        }
         .onChange(of: viewModel.mediaType) { _, _ in Task { await viewModel.load() } }
+        .onChange(of: viewModel.selectedListId) { _, _ in
+            guard viewModel.source == .customList else { return }
+            Task { await viewModel.load() }
+        }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("类型", selection: $viewModel.mediaType) {
-                    Text("电影").tag("movies")
-                    Text("剧集").tag("shows")
+                Picker("列表来源", selection: $viewModel.source) {
+                    ForEach(WatchlistViewModel.Source.allCases, id: \.self) { source in
+                        Text(source.title).tag(source)
+                    }
                 }
                 .pickerStyle(.segmented)
                 .controlSize(.regular)
-                .frame(width: 180)
+                .labelsHidden()
+                .frame(width: 190)
             }
 
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { CacheService.clearAllAPIResponses(); await viewModel.load() }
+                    Task { await viewModel.refresh() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
@@ -44,5 +59,72 @@ struct WatchlistView: View {
                 .help("刷新")
             }
         }
+    }
+
+    private var filterBar: some View {
+        HStack(spacing: 16) {
+            Menu {
+                Button {
+                    viewModel.mediaType = "movies"
+                } label: {
+                    Label("电影", systemImage: "film")
+                }
+
+                Button {
+                    viewModel.mediaType = "shows"
+                } label: {
+                    Label("剧集", systemImage: "tv")
+                }
+            } label: {
+                inlineMenuLabel(
+                    title: viewModel.mediaType == "movies" ? "电影" : "剧集",
+                    icon: viewModel.mediaType == "movies" ? "film" : "tv"
+                )
+            }
+            .menuStyle(.button)
+            .buttonStyle(.plain)
+
+            if viewModel.source == .customList {
+                Menu {
+                    if viewModel.customLists.isEmpty {
+                        Text("暂无列表")
+                    } else {
+                        ForEach(viewModel.customLists) { list in
+                            Button {
+                                viewModel.selectedListId = list.ids.trakt
+                            } label: {
+                                Text(list.name)
+                            }
+                        }
+                    }
+                } label: {
+                    inlineMenuLabel(
+                        title: viewModel.customListTitle(for: viewModel.selectedListId),
+                        icon: "list.bullet.rectangle"
+                    )
+                }
+                .menuStyle(.button)
+                .buttonStyle(.plain)
+                .disabled(viewModel.customLists.isEmpty)
+            }
+
+            Spacer()
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func inlineMenuLabel(title: String, icon: String) -> some View {
+        HStack(spacing: 6) {
+            Image(systemName: icon)
+                .font(.system(size: 12, weight: .semibold))
+            Text(title)
+                .font(.system(size: 13, weight: .semibold))
+            Image(systemName: "chevron.down")
+                .font(.system(size: 10, weight: .bold))
+                .foregroundStyle(.tertiary)
+        }
+        .foregroundStyle(.secondary)
+        .padding(.vertical, 4)
+        .contentShape(Rectangle())
     }
 }
