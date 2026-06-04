@@ -1,6 +1,7 @@
 import Foundation
 import SwiftData
 import AuthenticationServices
+import AppKit
 import CryptoKit
 
 enum AuthError: Error, LocalizedError {
@@ -98,6 +99,16 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
     // MARK: - ASWebAuthenticationPresentationContextProviding
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
+        if Thread.isMainThread {
+            return Self.currentPresentationAnchor()
+        }
+
+        return DispatchQueue.main.sync {
+            Self.currentPresentationAnchor()
+        }
+    }
+
+    private nonisolated static func currentPresentationAnchor() -> ASPresentationAnchor {
         MainActor.assumeIsolated {
             NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first ?? NSWindow()
         }

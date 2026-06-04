@@ -115,6 +115,51 @@ import Foundation
         CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
         return result
     }
+
+    static func comments(
+        commentType: String = "all",
+        type: String = "all",
+        page: Int = 1,
+        limit: Int = 12
+    ) async throws -> [UserCommentItemDTO] {
+        var params: [String: String] = ["extended": "full,images"]
+        params.merge(TraktEndpoint.makePagination(page: page, limit: limit)) { $1 }
+
+        let cacheKey = "user_comments_\(commentType)_\(type)_p\(page)_l\(limit)"
+        if let cached: [UserCommentItemDTO] = CacheService.getAPIResponse(key: cacheKey) {
+            return cached
+        }
+
+        let result: [UserCommentItemDTO] = try await TraktAPIClient.shared.request(
+            uri: "/users/me/comments/\(commentType)/\(type)",
+            params: params,
+            requiresAuth: true
+        )
+        CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
+        return result
+    }
+
+    static func ratings(
+        type: String,
+        page: Int = 1,
+        limit: Int = 12
+    ) async throws -> [UserRatingItemDTO] {
+        var params: [String: String] = ["extended": "full,images"]
+        params.merge(TraktEndpoint.makePagination(page: page, limit: limit)) { $1 }
+
+        let cacheKey = "user_ratings_\(type)_p\(page)_l\(limit)"
+        if let cached: [UserRatingItemDTO] = CacheService.getAPIResponse(key: cacheKey) {
+            return cached
+        }
+
+        let result: [UserRatingItemDTO] = try await TraktAPIClient.shared.request(
+            uri: "/users/me/ratings/\(type)",
+            params: params,
+            requiresAuth: true
+        )
+        CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
+        return result
+    }
 }
 
 struct TraktListDTO: Codable, Identifiable, Hashable {
@@ -150,6 +195,48 @@ struct HistoryItemDTO: Codable, Identifiable {
         case id
         case watchedAt = "watched_at"
         case action, type, movie, show, episode
+    }
+}
+
+struct UserCommentItemDTO: Codable, Identifiable {
+    let comment: CommentDTO
+    let type: String?
+    let movie: MovieDTO?
+    let show: ShowDTO?
+    let season: SeasonDTO?
+    let episode: EpisodeDTO?
+
+    var id: Int { comment.id }
+}
+
+struct UserRatingItemDTO: Codable, Identifiable {
+    let ratedAt: String
+    let rating: Int
+    let type: String?
+    let movie: MovieDTO?
+    let show: ShowDTO?
+    let season: SeasonDTO?
+    let episode: EpisodeDTO?
+
+    var id: String {
+        [
+            type ?? mediaType,
+            "\(movie?.ids.trakt ?? show?.ids.trakt ?? season?.ids.trakt ?? episode?.ids.trakt ?? 0)",
+            ratedAt
+        ].joined(separator: "_")
+    }
+
+    var mediaType: String {
+        if movie != nil { return "movie" }
+        if episode != nil { return "episode" }
+        if season != nil { return "season" }
+        if show != nil { return "show" }
+        return "rating"
+    }
+
+    enum CodingKeys: String, CodingKey {
+        case ratedAt = "rated_at"
+        case rating, type, movie, show, season, episode
     }
 }
 

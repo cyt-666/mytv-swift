@@ -24,7 +24,7 @@ final class HomeViewModel {
 
         if AuthService.shared.isLoggedIn {
             // Load all user-specific data in parallel
-            async let stats = loadMonthlyWatchStats()
+            async let stats = MonthlyWatchStatsService.load(for: Date())
             async let recMovies = RecommendationAPI.movies()
             async let recShows = RecommendationAPI.shows()
             async let upNext = ProgressAPI.upNext()
@@ -78,157 +78,6 @@ final class HomeViewModel {
         }
     }
 
-    private func loadMonthlyWatchStats() async throws -> MonthlyWatchStats {
-        let calendar = Calendar.current
-        let now = Date()
-        let monthComponents = calendar.dateComponents([.year, .month], from: now)
-        let monthStart = calendar.date(from: monthComponents) ?? now
-        let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? now
-
-        let startAt = Self.traktDateFormatter.string(from: monthStart)
-        let endAt = Self.traktDateFormatter.string(from: nextMonthStart)
-
-        var allItems: [HistoryItemDTO] = []
-        let limit = 100
-        for page in 1...5 {
-            let pageItems = try await UserAPI.history(page: page, limit: limit, startAt: startAt, endAt: endAt)
-            allItems.append(contentsOf: pageItems)
-            if pageItems.count < limit {
-                break
-            }
-        }
-
-        return makeMonthlyWatchStats(from: allItems, monthStart: monthStart)
-    }
-
-    private func makeMonthlyWatchStats(from items: [HistoryItemDTO], monthStart: Date) -> MonthlyWatchStats {
-        let calendar = Calendar.current
-        var watchedDays = Set<Date>()
-        var dayCounts: [Date: Int] = [:]
-        var estimatedMinutes = 0
-
-        for item in items {
-            if let watchedDate = Self.parseTraktDate(item.watchedAt) {
-                let day = calendar.startOfDay(for: watchedDate)
-                watchedDays.insert(day)
-                dayCounts[day, default: 0] += 1
-            }
-            estimatedMinutes += runtimeMinutes(for: item)
-        }
-
-        let busiestDay = dayCounts
-            .sorted { lhs, rhs in
-                if lhs.value == rhs.value {
-                    return lhs.key > rhs.key
-                }
-                return lhs.value > rhs.value
-            }
-            .first
-
-        let sortedItems = items
-            .sorted { lhs, rhs in
-                (Self.parseTraktDate(lhs.watchedAt) ?? .distantPast) > (Self.parseTraktDate(rhs.watchedAt) ?? .distantPast)
-            }
-
-        let recentItems = sortedItems
-            .prefix(3)
-            .map(makeRecentWatchItem)
-
-        let backgroundURL = sortedItems
-            .lazy
-            .compactMap(backgroundURL)
-            .first
-
-        return MonthlyWatchStats(
-            monthTitle: Self.monthFormatter.string(from: monthStart),
-            totalCount: items.count,
-            movieCount: items.filter { $0.type == "movie" }.count,
-            episodeCount: items.filter { $0.type == "episode" }.count,
-            watchedDays: watchedDays.count,
-            estimatedMinutes: estimatedMinutes,
-            busiestDay: busiestDay.map { Self.dayFormatter.string(from: $0.key) },
-            busiestDayCount: busiestDay?.value ?? 0,
-            recentItems: recentItems,
-            backgroundURL: backgroundURL
-        )
-    }
-
-    private func runtimeMinutes(for item: HistoryItemDTO) -> Int {
-        switch item.type {
-        case "movie":
-            return item.movie?.runtime ?? 0
-        case "episode":
-            return item.episode?.runtime ?? item.show?.runtime ?? 0
-        default:
-            return item.movie?.runtime ?? item.episode?.runtime ?? item.show?.runtime ?? 0
-        }
-    }
-
-    private func makeRecentWatchItem(from item: HistoryItemDTO) -> MonthlyRecentWatchItem {
-        let title: String
-        let subtitle: String
-        let posterURL: String?
-
-        if item.type == "movie" {
-            title = item.movie?.title ?? "未知电影"
-            subtitle = "电影"
-            posterURL = item.movie?.images?.poster?.first
-        } else if item.type == "episode" {
-            title = item.show?.title ?? item.episode?.title ?? "未知剧集"
-            if let episode = item.episode {
-                let episodeTitle = episode.title.map { " · \($0)" } ?? ""
-                subtitle = "S\(episode.season)E\(episode.number)\(episodeTitle)"
-            } else {
-                subtitle = "剧集"
-            }
-            posterURL = item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
-        } else {
-            title = item.movie?.title ?? item.show?.title ?? item.episode?.title ?? "未知"
-            subtitle = item.type
-            posterURL = item.movie?.images?.poster?.first ?? item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
-        }
-
-        return MonthlyRecentWatchItem(
-            id: item.id,
-            title: title,
-            subtitle: subtitle,
-            watchedAt: item.watchedAt,
-            posterURL: posterURL
-        )
-    }
-
-    private func backgroundURL(for item: HistoryItemDTO) -> String? {
-        switch item.type {
-        case "movie":
-            let images = item.movie?.images
-            if let url = images?.fanart?.first { return url }
-            if let url = images?.banner?.first { return url }
-            if let url = images?.poster?.first { return url }
-            return nil
-        case "episode":
-            let showImages = item.show?.images
-            let episodeImages = item.episode?.images
-            if let url = showImages?.fanart?.first { return url }
-            if let url = episodeImages?.fanart?.first { return url }
-            if let url = episodeImages?.screenshot?.first { return url }
-            if let url = showImages?.banner?.first { return url }
-            if let url = showImages?.poster?.first { return url }
-            return nil
-        default:
-            let movieImages = item.movie?.images
-            let showImages = item.show?.images
-            let episodeImages = item.episode?.images
-
-            if let url = movieImages?.fanart?.first { return url }
-            if let url = showImages?.fanart?.first { return url }
-            if let url = episodeImages?.fanart?.first { return url }
-            if let url = episodeImages?.screenshot?.first { return url }
-            if let url = movieImages?.poster?.first { return url }
-            if let url = showImages?.poster?.first { return url }
-            return nil
-        }
-    }
-
     /// Watchlist ∩ Collection = shows the user owns and wants to watch
     private func loadStartWatching() async throws -> [ShowDTO] {
         async let watchlistResult: [WatchlistShowDTO] = TraktAPIClient.shared.request(
@@ -249,43 +98,6 @@ final class HomeViewModel {
         return watchlist
             .filter { collectionIds.contains($0.show.ids.trakt) }
             .map(\.show)
-    }
-
-    private static let traktDateFormatter: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.timeZone = TimeZone(secondsFromGMT: 0)
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let traktDateParserWithFractionalSeconds: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
-        return formatter
-    }()
-
-    private static let traktDateParser: ISO8601DateFormatter = {
-        let formatter = ISO8601DateFormatter()
-        formatter.formatOptions = [.withInternetDateTime]
-        return formatter
-    }()
-
-    private static let monthFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月"
-        return formatter
-    }()
-
-    private static let dayFormatter: DateFormatter = {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日"
-        return formatter
-    }()
-
-    private static func parseTraktDate(_ value: String) -> Date? {
-        traktDateParserWithFractionalSeconds.date(from: value) ?? traktDateParser.date(from: value)
     }
 
     private func restoreCachedContentIfNeeded() {
@@ -350,6 +162,195 @@ private struct HomeContentSnapshot: Codable {
     let recommendedShows: [ShowDTO]
     let upNextItems: [UpNextItemDTO]
     let startWatchingShows: [ShowDTO]
+}
+
+@MainActor
+enum MonthlyWatchStatsService {
+    static func load(for date: Date) async throws -> MonthlyWatchStats {
+        let calendar = Calendar.current
+        let monthStart = startOfMonth(containing: date, calendar: calendar)
+        let nextMonthStart = calendar.date(byAdding: .month, value: 1, to: monthStart) ?? date
+
+        let startAt = traktDateFormatter.string(from: monthStart)
+        let endAt = traktDateFormatter.string(from: nextMonthStart)
+
+        var allItems: [HistoryItemDTO] = []
+        let limit = 100
+        for page in 1...5 {
+            let pageItems = try await UserAPI.history(page: page, limit: limit, startAt: startAt, endAt: endAt)
+            allItems.append(contentsOf: pageItems)
+            if pageItems.count < limit {
+                break
+            }
+        }
+
+        return makeStats(from: allItems, monthStart: monthStart)
+    }
+
+    static func previousMonthDate(from date: Date = Date()) -> Date {
+        Calendar.current.date(byAdding: .month, value: -1, to: date) ?? date
+    }
+
+    private static func makeStats(from items: [HistoryItemDTO], monthStart: Date) -> MonthlyWatchStats {
+        let calendar = Calendar.current
+        var watchedDays = Set<Date>()
+        var dayCounts: [Date: Int] = [:]
+        var estimatedMinutes = 0
+
+        for item in items {
+            if let watchedDate = parseTraktDate(item.watchedAt) {
+                let day = calendar.startOfDay(for: watchedDate)
+                watchedDays.insert(day)
+                dayCounts[day, default: 0] += 1
+            }
+            estimatedMinutes += runtimeMinutes(for: item)
+        }
+
+        let busiestDay = dayCounts
+            .sorted { lhs, rhs in
+                if lhs.value == rhs.value {
+                    return lhs.key > rhs.key
+                }
+                return lhs.value > rhs.value
+            }
+            .first
+
+        let sortedItems = items
+            .sorted { lhs, rhs in
+                (parseTraktDate(lhs.watchedAt) ?? .distantPast) > (parseTraktDate(rhs.watchedAt) ?? .distantPast)
+            }
+
+        return MonthlyWatchStats(
+            monthTitle: monthFormatter.string(from: monthStart),
+            totalCount: items.count,
+            movieCount: items.filter { $0.type == "movie" }.count,
+            episodeCount: items.filter { $0.type == "episode" }.count,
+            watchedDays: watchedDays.count,
+            estimatedMinutes: estimatedMinutes,
+            busiestDay: busiestDay.map { dayFormatter.string(from: $0.key) },
+            busiestDayCount: busiestDay?.value ?? 0,
+            recentItems: sortedItems.prefix(3).map(makeRecentWatchItem),
+            backgroundURL: sortedItems.lazy.compactMap(backgroundURL).first
+        )
+    }
+
+    private static func startOfMonth(containing date: Date, calendar: Calendar) -> Date {
+        let components = calendar.dateComponents([.year, .month], from: date)
+        return calendar.date(from: components) ?? date
+    }
+
+    private static func runtimeMinutes(for item: HistoryItemDTO) -> Int {
+        switch item.type {
+        case "movie":
+            return item.movie?.runtime ?? 0
+        case "episode":
+            return item.episode?.runtime ?? item.show?.runtime ?? 0
+        default:
+            return item.movie?.runtime ?? item.episode?.runtime ?? item.show?.runtime ?? 0
+        }
+    }
+
+    private static func makeRecentWatchItem(from item: HistoryItemDTO) -> MonthlyRecentWatchItem {
+        let title: String
+        let subtitle: String
+        let posterURL: String?
+
+        if item.type == "movie" {
+            title = item.movie?.title ?? "未知电影"
+            subtitle = "电影"
+            posterURL = item.movie?.images?.poster?.first
+        } else if item.type == "episode" {
+            title = item.show?.title ?? item.episode?.title ?? "未知剧集"
+            if let episode = item.episode {
+                let episodeTitle = episode.title.map { " · \($0)" } ?? ""
+                subtitle = "S\(episode.season)E\(episode.number)\(episodeTitle)"
+            } else {
+                subtitle = "剧集"
+            }
+            posterURL = item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
+        } else {
+            title = item.movie?.title ?? item.show?.title ?? item.episode?.title ?? "未知"
+            subtitle = item.type
+            posterURL = item.movie?.images?.poster?.first ?? item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
+        }
+
+        return MonthlyRecentWatchItem(
+            id: item.id,
+            title: title,
+            subtitle: subtitle,
+            watchedAt: item.watchedAt,
+            posterURL: posterURL
+        )
+    }
+
+    private static func backgroundURL(for item: HistoryItemDTO) -> String? {
+        switch item.type {
+        case "movie":
+            let images = item.movie?.images
+            if let url = images?.fanart?.first { return url }
+            if let url = images?.banner?.first { return url }
+            if let url = images?.poster?.first { return url }
+            return nil
+        case "episode":
+            let showImages = item.show?.images
+            let episodeImages = item.episode?.images
+            if let url = showImages?.fanart?.first { return url }
+            if let url = episodeImages?.fanart?.first { return url }
+            if let url = episodeImages?.screenshot?.first { return url }
+            if let url = showImages?.banner?.first { return url }
+            if let url = showImages?.poster?.first { return url }
+            return nil
+        default:
+            let movieImages = item.movie?.images
+            let showImages = item.show?.images
+            let episodeImages = item.episode?.images
+
+            if let url = movieImages?.fanart?.first { return url }
+            if let url = showImages?.fanart?.first { return url }
+            if let url = episodeImages?.fanart?.first { return url }
+            if let url = episodeImages?.screenshot?.first { return url }
+            if let url = movieImages?.poster?.first { return url }
+            if let url = showImages?.poster?.first { return url }
+            return nil
+        }
+    }
+
+    static func parseTraktDate(_ value: String) -> Date? {
+        traktDateParserWithFractionalSeconds.date(from: value) ?? traktDateParser.date(from: value)
+    }
+
+    private static let traktDateFormatter: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.timeZone = TimeZone(secondsFromGMT: 0)
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let traktDateParserWithFractionalSeconds: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime, .withFractionalSeconds]
+        return formatter
+    }()
+
+    private static let traktDateParser: ISO8601DateFormatter = {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = [.withInternetDateTime]
+        return formatter
+    }()
+
+    private static let monthFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "yyyy年M月"
+        return formatter
+    }()
+
+    private static let dayFormatter: DateFormatter = {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.dateFormat = "M月d日"
+        return formatter
+    }()
 }
 
 struct MonthlyWatchStats: Codable {
