@@ -4,14 +4,16 @@ struct ShowDetailView: View {
     let showId: Int
     @State private var viewModel: ShowDetailViewModel?
     @State private var listActionViewModel = MediaListActionViewModel()
+    @State private var moviePilotViewModel = MoviePilotMediaViewModel()
     @Environment(AppState.self) private var appState
 
     var body: some View {
         Group {
             if let viewModel, let show = viewModel.show {
+                let moviePilotTarget = MoviePilotMediaTarget.show(show)
                 ScrollView {
                     VStack(spacing: 0) {
-                        showHero(show: show, translation: viewModel.translation)
+                        showHero(show: show, translation: viewModel.translation, seasons: viewModel.seasons)
 
                         HStack(alignment: .top, spacing: 22) {
                             VStack(alignment: .leading, spacing: 18) {
@@ -70,6 +72,12 @@ struct ShowDetailView: View {
                             }
 
                             VStack(spacing: 12) {
+                                MoviePilotStatusPanel(
+                                    target: moviePilotTarget,
+                                    viewModel: moviePilotViewModel,
+                                    onConfigure: navigateToSettings
+                                )
+
                                 if let rating = show.rating {
                                     DetailStatTile(
                                         title: "Trakt 评分",
@@ -110,9 +118,10 @@ struct ShowDetailView: View {
         }
     }
 
-    private func showHero(show: ShowDetailsDTO, translation: TranslationResult?) -> some View {
+    private func showHero(show: ShowDetailsDTO, translation: TranslationResult?, seasons: [SeasonDTO]) -> some View {
         let title = translation?.title ?? show.title
         let backdropURL = show.images?.fanart?.first ?? show.images?.poster?.first
+        let moviePilotTarget = MoviePilotMediaTarget.show(show)
 
         return ZStack(alignment: .bottomLeading) {
             DetailHeroArtworkView(urlString: backdropURL, height: 420, dimming: 0.18)
@@ -154,10 +163,19 @@ struct ShowDetailView: View {
                         }
                     }
 
-                    MediaListActionMenu(
-                        target: .show(show.ids.trakt),
-                        viewModel: listActionViewModel
-                    )
+                    HStack(spacing: 10) {
+                        MediaListActionMenu(
+                            target: .show(show.ids.trakt),
+                            viewModel: listActionViewModel
+                        )
+
+                        MoviePilotSubscribeButton(
+                            target: moviePilotTarget,
+                            seasons: seasons,
+                            viewModel: moviePilotViewModel,
+                            onConfigure: navigateToSettings
+                        )
+                    }
                 }
                 .frame(maxWidth: 720, alignment: .leading)
             }
@@ -175,6 +193,10 @@ struct ShowDetailView: View {
                 Task { await viewModel.postComment() }
             }
         )
+    }
+
+    private func navigateToSettings() {
+        appState.navigate(to: .settings)
     }
 }
 
