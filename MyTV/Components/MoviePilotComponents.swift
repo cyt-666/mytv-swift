@@ -26,8 +26,8 @@ struct MoviePilotSubscribeButton: View {
         }
         .buttonStyle(.plain)
         .fixedSize()
-        .disabled(viewModel.isSubscribing)
-        .help(viewModel.isConfigured ? "添加 MoviePilot 订阅" : "配置 MoviePilot")
+        .disabled(viewModel.isSubscribing || isFullySubscribed)
+        .help(buttonHelp)
         .sheet(isPresented: $isShowingSeasonPicker) {
             MoviePilotSeasonPickerSheet(
                 target: target,
@@ -44,17 +44,57 @@ struct MoviePilotSubscribeButton: View {
     private var buttonTitle: String {
         if viewModel.isSubscribing { return "提交中..." }
         if !viewModel.isConfigured { return "配置 MoviePilot" }
-        return target.kind == .tv ? "选季订阅" : "订阅 MP"
+        if isFullySubscribed { return "已订阅" }
+        if hasLibraryReminder {
+            if target.kind == .tv {
+                return viewModel.status.hasSubscription ? "已入库·继续" : "已入库·选季"
+            }
+            return "已入库·订阅"
+        }
+        if target.kind == .tv {
+            return viewModel.status.hasSubscription ? "继续订阅" : "选季订阅"
+        }
+        return "订阅 MP"
     }
 
     private var buttonIcon: String {
         if viewModel.isSubscribing { return "hourglass" }
         if !viewModel.isConfigured { return "gearshape" }
+        if isFullySubscribed { return "checkmark.circle.fill" }
+        if hasLibraryReminder { return "externaldrive.fill" }
         return "arrow.down.circle.fill"
     }
 
     private var buttonTint: Color {
-        viewModel.isConfigured ? .indigo : .orange
+        if !viewModel.isConfigured { return .orange }
+        return isFullySubscribed || hasLibraryReminder ? .green : .indigo
+    }
+
+    private var buttonHelp: String {
+        if !viewModel.isConfigured { return "配置 MoviePilot" }
+        if isFullySubscribed { return "已添加 MoviePilot 订阅" }
+        if hasLibraryReminder {
+            return target.kind == .tv ? "MoviePilot 已入库，可继续订阅缺失季度" : "MoviePilot 已入库，通常无需重复订阅"
+        }
+        return target.kind == .tv ? "添加 MoviePilot 季度订阅" : "添加 MoviePilot 订阅"
+    }
+
+    private var hasLibraryReminder: Bool {
+        viewModel.status.hasLibraryItem && !isFullySubscribed
+    }
+
+    private var regularSeasons: [SeasonDTO] {
+        seasons.filter { $0.number > 0 }
+    }
+
+    private var isFullySubscribed: Bool {
+        guard viewModel.status.hasSubscription else { return false }
+        guard target.kind == .tv else { return true }
+        if viewModel.status.subscriptions.contains(where: { $0.season == nil }) {
+            return true
+        }
+        guard !regularSeasons.isEmpty else { return true }
+        return regularSeasons.allSatisfy { viewModel.isSeasonSubscribed($0.number) }
     }
 
     private func handleTap() {
@@ -62,6 +102,7 @@ struct MoviePilotSubscribeButton: View {
             onConfigure()
             return
         }
+        guard !isFullySubscribed else { return }
         if target.kind == .tv {
             isShowingSeasonPicker = true
         } else {
@@ -100,7 +141,12 @@ struct MoviePilotStatusPanel: View {
 
             if viewModel.isConfigured {
                 statusRow(title: "入库", value: viewModel.libraryLabel, icon: "externaldrive.fill", tint: viewModel.status.hasLibraryItem ? .green : .secondary)
-                statusRow(title: "订阅", value: viewModel.subscriptionLabel, icon: "rss", tint: viewModel.status.hasSubscription ? .indigo : .secondary)
+                statusRow(
+                    title: "订阅",
+                    value: viewModel.subscriptionLabel,
+                    icon: viewModel.status.hasSubscription ? "checkmark.seal.fill" : "plus.circle.fill",
+                    tint: viewModel.status.hasSubscription ? .indigo : .secondary
+                )
                 statusRow(title: "下载", value: viewModel.downloadLabel, icon: "arrow.down.circle.fill", tint: viewModel.status.downloads.isEmpty ? .secondary : .blue)
             } else {
                 Button {
