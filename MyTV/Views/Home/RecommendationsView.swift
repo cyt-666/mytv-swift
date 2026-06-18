@@ -26,22 +26,9 @@ struct RecommendationsView: View {
                             .padding(.top, 60)
 
                         MediaGridView(
-                            items: viewModel.items,
-                            onItemAppear: { item in
-                                Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
-                            }
+                            items: viewModel.items
                         )
                         .padding(.horizontal, 20)
-
-                        PaginationFooterView(
-                            isLoadingMore: viewModel.isLoadingMore,
-                            canLoadMore: viewModel.canLoadMore,
-                            errorMessage: viewModel.errorMessage,
-                            onRetry: {
-                                Task { await viewModel.loadMoreIfNeeded() }
-                            }
-                        )
-                        .padding(.bottom, 24)
                     }
                 }
             }
@@ -50,12 +37,15 @@ struct RecommendationsView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await viewModel.load(type: type, reset: true) }
+                    Task {
+                        CacheService.clearAllAPIResponses()
+                        await viewModel.load(type: type, reset: true)
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
                 }
-                .disabled(viewModel.isLoading || viewModel.isLoadingMore)
+                .disabled(viewModel.isLoading)
                 .help("刷新")
             }
         }
@@ -67,22 +57,16 @@ struct RecommendationsView: View {
 private final class RecommendationsViewModel {
     var items: [MediaItem] = []
     var isLoading = false
-    var isLoadingMore = false
-    var canLoadMore = true
     var errorMessage: String?
 
     private var type = ""
-    private var page = 1
-    private let pageSize = 30
-    private let loadMoreThreshold = 6
+    private let recommendationLimit = 100
 
     func load(type: String, reset: Bool = true) async {
         guard !isLoading else { return }
 
         if reset || type != self.type {
             self.type = type
-            page = 1
-            canLoadMore = true
             items = []
         }
 
@@ -91,57 +75,21 @@ private final class RecommendationsViewModel {
         defer { isLoading = false }
 
         do {
-            let newItems = try await fetchPage(page)
+            let newItems = try await fetchRecommendations()
             items = uniqueItems(from: newItems)
-            canLoadMore = newItems.count == pageSize && !items.isEmpty
         } catch {
             errorMessage = "加载失败: \(error.localizedDescription)"
-            canLoadMore = false
         }
     }
 
-    func loadMoreIfNeeded(currentItem: MediaItem? = nil) async {
-        guard shouldLoadMore(for: currentItem) else { return }
-
-        errorMessage = nil
-        isLoadingMore = true
-        defer { isLoadingMore = false }
-
-        do {
-            let nextPage = page + 1
-            let newItems = try await fetchPage(nextPage)
-            page = nextPage
-            let appendedCount = appendUnique(newItems)
-            canLoadMore = newItems.count == pageSize && appendedCount > 0
-        } catch {
-            errorMessage = "加载更多失败: \(error.localizedDescription)"
-        }
-    }
-
-    private func fetchPage(_ page: Int) async throws -> [MediaItem] {
+    private func fetchRecommendations() async throws -> [MediaItem] {
         if type == "movies" {
-            let movies = try await RecommendationAPI.movies(page: page, limit: pageSize)
+            let movies = try await RecommendationAPI.movies(limit: recommendationLimit)
             return movies.map { .movie($0) }
         } else {
-            let shows = try await RecommendationAPI.shows(page: page, limit: pageSize)
+            let shows = try await RecommendationAPI.shows(limit: recommendationLimit)
             return shows.map { .show($0) }
         }
-    }
-
-    private func shouldLoadMore(for currentItem: MediaItem?) -> Bool {
-        guard canLoadMore, !type.isEmpty, !isLoading, !isLoadingMore else { return false }
-        guard let currentItem else { return true }
-        guard let index = items.firstIndex(where: { $0.id == currentItem.id }) else {
-            return false
-        }
-        let thresholdIndex = max(items.count - loadMoreThreshold, 0)
-        return index >= thresholdIndex
-    }
-
-    private func appendUnique(_ newItems: [MediaItem]) -> Int {
-        let uniqueItems = uniqueItems(from: newItems, excluding: Set(items.map(\.id)))
-        items.append(contentsOf: uniqueItems)
-        return uniqueItems.count
     }
 
     private func uniqueItems(from newItems: [MediaItem], excluding existingIds: Set<String> = []) -> [MediaItem] {

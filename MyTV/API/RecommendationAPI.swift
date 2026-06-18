@@ -1,13 +1,16 @@
 import Foundation
 
 @MainActor enum RecommendationAPI {
-    static func movies(page: Int = 1, limit: Int = 30) async throws -> [MovieDTO] {
-        let cacheKey = "recommendations_movies_p\(page)_l\(limit)"
+    static func movies(limit: Int = 30) async throws -> [MovieDTO] {
+        let cacheKey = "recommendations_movies_l\(limit)"
         if let cached: [MovieDTO] = CacheService.getAPIResponse(key: cacheKey) {
             return cached
         }
-        var params: [String: String] = ["ignore_collected": "true", "ignore_watched": "true"]
-        params.merge(TraktEndpoint.makePagination(page: page, limit: limit)) { $1 }
+        let params: [String: String] = [
+            "ignore_collected": "true",
+            "ignore_watchlisted": "true",
+            "limit": String(limit)
+        ]
 
         let result: [MovieDTO] = try await TraktAPIClient.shared.request(
             uri: "/recommendations/movies",
@@ -18,13 +21,16 @@ import Foundation
         return result
     }
 
-    static func shows(page: Int = 1, limit: Int = 30) async throws -> [ShowDTO] {
-        let cacheKey = "recommendations_shows_p\(page)_l\(limit)"
+    static func shows(limit: Int = 30) async throws -> [ShowDTO] {
+        let cacheKey = "recommendations_shows_l\(limit)"
         if let cached: [ShowDTO] = CacheService.getAPIResponse(key: cacheKey) {
             return cached
         }
-        var params: [String: String] = ["ignore_collected": "true", "ignore_watched": "true"]
-        params.merge(TraktEndpoint.makePagination(page: page, limit: limit)) { $1 }
+        let params: [String: String] = [
+            "ignore_collected": "true",
+            "ignore_watchlisted": "true",
+            "limit": String(limit)
+        ]
 
         let result: [ShowDTO] = try await TraktAPIClient.shared.request(
             uri: "/recommendations/shows",
