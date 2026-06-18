@@ -6,6 +6,7 @@ final class MoviePilotMediaViewModel {
     var status = MoviePilotMediaStatus.empty
     var isLoadingStatus = false
     var isSubscribing = false
+    var isPerformingAction = false
     var message: String?
     var errorMessage: String?
 
@@ -85,6 +86,49 @@ final class MoviePilotMediaViewModel {
         status.isSeasonSubscribed(season)
     }
 
+    func setSubscription(_ subscription: MoviePilotSubscription, paused: Bool, target: MoviePilotMediaTarget) async {
+        await performAction(refreshing: target) {
+            try await MoviePilotAPIClient.shared.updateSubscription(
+                id: subscription.id,
+                state: paused ? "S" : "R"
+            )
+        }
+    }
+
+    func deleteSubscription(_ subscription: MoviePilotSubscription, target: MoviePilotMediaTarget) async {
+        await performAction(refreshing: target) {
+            try await MoviePilotAPIClient.shared.deleteSubscription(id: subscription.id)
+        }
+    }
+
+    func setDownload(_ download: MoviePilotDownloadTask, paused: Bool, target: MoviePilotMediaTarget) async {
+        guard let hash = download.hash, !hash.isEmpty else {
+            errorMessage = "这个下载任务缺少 hash，无法操作"
+            return
+        }
+        await performAction(refreshing: target) {
+            try await MoviePilotAPIClient.shared.modifyDownload(
+                hash: hash,
+                downloader: download.downloader,
+                action: paused ? "stop" : "start"
+            )
+        }
+    }
+
+    func deleteDownload(_ download: MoviePilotDownloadTask, deleteFiles: Bool, target: MoviePilotMediaTarget) async {
+        guard let hash = download.hash, !hash.isEmpty else {
+            errorMessage = "这个下载任务缺少 hash，无法删除"
+            return
+        }
+        await performAction(refreshing: target) {
+            try await MoviePilotAPIClient.shared.deleteDownload(
+                hash: hash,
+                downloader: download.downloader,
+                deleteFiles: deleteFiles
+            )
+        }
+    }
+
     var libraryLabel: String {
         if isLoadingStatus { return "检查中..." }
         if status.hasLibraryItem {
@@ -132,5 +176,25 @@ final class MoviePilotMediaViewModel {
 
     private func message(for error: Error) -> String {
         (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
+    }
+
+    private func performAction(refreshing target: MoviePilotMediaTarget, action: () async throws -> String) async {
+        guard isConfigured else {
+            errorMessage = "请先配置 MoviePilot"
+            return
+        }
+        guard !isPerformingAction else { return }
+
+        isPerformingAction = true
+        message = nil
+        errorMessage = nil
+        defer { isPerformingAction = false }
+
+        do {
+            message = try await action()
+            await loadStatus(for: target)
+        } catch {
+            errorMessage = message(for: error)
+        }
     }
 }

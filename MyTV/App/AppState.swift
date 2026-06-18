@@ -11,6 +11,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
     case history = "观看历史"
     case collection = "我的片库"
     case calendar = "剧集日历"
+    case moviePilot = "MoviePilot"
 
     var id: String { rawValue }
 
@@ -25,6 +26,7 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
         case .history: return "clock.arrow.circlepath"
         case .collection: return "folder.fill"
         case .calendar: return "calendar"
+        case .moviePilot: return "bolt.horizontal.circle.fill"
         }
     }
 

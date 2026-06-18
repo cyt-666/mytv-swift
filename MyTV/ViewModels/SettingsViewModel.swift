@@ -7,6 +7,7 @@ final class SettingsViewModel {
     var moviePilotHost = MoviePilotSettingsStore.defaultHost
     var moviePilotAPIKey = ""
     var moviePilotNotificationsEnabled = false
+    var moviePilotNotificationCategories = MoviePilotNotificationCategory.defaultEnabled
     var isTestingMoviePilot = false
     var isSavingMoviePilot = false
     var moviePilotMessage: String?
@@ -22,13 +23,7 @@ final class SettingsViewModel {
         if availableMoviePilotTools.isEmpty {
             return isMoviePilotConfigured ? "尚未测试连接" : "未配置"
         }
-        let required: Set<String> = [
-            "add_subscribe",
-            "query_subscribes",
-            "query_library_exists",
-            "query_download_tasks"
-        ]
-        let missing = required.subtracting(availableMoviePilotTools).sorted()
+        let missing = MoviePilotConnectionResult.requiredTools.subtracting(availableMoviePilotTools).sorted()
         if missing.isEmpty {
             return "连接正常"
         }
@@ -39,6 +34,7 @@ final class SettingsViewModel {
         moviePilotHost = MoviePilotSettingsStore.host()
         moviePilotAPIKey = (try? MoviePilotSettingsStore.apiKey()) ?? ""
         moviePilotNotificationsEnabled = MoviePilotSettingsStore.notificationsEnabled()
+        moviePilotNotificationCategories = MoviePilotSettingsStore.notificationCategories()
     }
 
     func saveMoviePilotSettings() async {
@@ -122,6 +118,17 @@ final class SettingsViewModel {
         MoviePilotSettingsStore.setNotificationsEnabled(enabled)
         moviePilotNotificationsEnabled = enabled
         MoviePilotNotificationService.shared.restartIfNeeded()
-        moviePilotMessage = enabled ? "入库通知已开启" : "入库通知已关闭"
+        moviePilotMessage = enabled ? "MoviePilot 通知已开启" : "MoviePilot 通知已关闭"
+    }
+
+    func setMoviePilotNotificationCategory(_ category: MoviePilotNotificationCategory, enabled: Bool) {
+        if enabled {
+            moviePilotNotificationCategories.insert(category)
+        } else {
+            moviePilotNotificationCategories.remove(category)
+        }
+        MoviePilotSettingsStore.setNotificationCategories(moviePilotNotificationCategories)
+        MoviePilotNotificationService.shared.restartIfNeeded()
+        moviePilotMessage = "通知类型已更新"
     }
 }

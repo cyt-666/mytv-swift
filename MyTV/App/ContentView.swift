@@ -57,6 +57,8 @@ struct ContentView: View {
             CollectionView()
         case .calendar:
             CalendarView()
+        case .moviePilot:
+            MoviePilotCenterView()
         case .none:
             Text("请选择一个页面")
         }

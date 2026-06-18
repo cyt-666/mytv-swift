@@ -123,13 +123,17 @@ final class MoviePilotNotificationService {
     }
 
     private func shouldNotify(_ message: MoviePilotMessage) -> Bool {
-        message.action == 1 && message.mtype == "整理入库"
+        guard message.action == 1,
+              let category = MoviePilotNotificationCategory.category(for: message) else {
+            return false
+        }
+        return MoviePilotSettingsStore.notificationCategories().contains(category)
     }
 
     private func postNotification(for message: MoviePilotMessage) async {
         let content = UNMutableNotificationContent()
-        content.title = nonEmpty(message.title) ?? "MoviePilot 入库完成"
-        content.body = nonEmpty(message.text) ?? "新的媒体已整理入库"
+        content.title = nonEmpty(message.title) ?? "MoviePilot"
+        content.body = nonEmpty(message.text) ?? "MoviePilot 有新的消息"
         content.sound = .default
 
         let request = UNNotificationRequest(

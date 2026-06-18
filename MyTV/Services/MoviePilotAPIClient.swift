@@ -71,6 +71,101 @@ actor MoviePilotAPIClient {
         return try await callTool("add_subscribe", arguments: arguments)
     }
 
+    func fetchSubscriptions(
+        status: String = "all",
+        mediaType: String = "all",
+        tmdbId: Int? = nil,
+        page: Int? = nil
+    ) async throws -> [MoviePilotSubscription] {
+        if let page {
+            return try await fetchSubscriptionsPage(status: status, mediaType: mediaType, tmdbId: tmdbId, page: page)
+        }
+
+        var allSubscriptions: [MoviePilotSubscription] = []
+        var currentPage = 1
+        while currentPage <= 10 {
+            let pageItems = try await fetchSubscriptionsPage(
+                status: status,
+                mediaType: mediaType,
+                tmdbId: tmdbId,
+                page: currentPage
+            )
+            allSubscriptions.append(contentsOf: pageItems)
+
+            guard pageItems.count >= 100 else { break }
+            currentPage += 1
+        }
+        return allSubscriptions
+    }
+
+    func fetchDownloadTasks(
+        status: String = "all",
+        downloader: String? = nil,
+        hash: String? = nil,
+        title: String? = nil,
+        tag: String? = nil
+    ) async throws -> [MoviePilotDownloadTask] {
+        var arguments: [String: MoviePilotJSONValue] = [
+            "status": .string(status)
+        ]
+        if let downloader, !downloader.isEmpty {
+            arguments["downloader"] = .string(downloader)
+        }
+        if let hash, !hash.isEmpty {
+            arguments["hash"] = .string(hash)
+        }
+        if let title, !title.isEmpty {
+            arguments["title"] = .string(title)
+        }
+        if let tag, !tag.isEmpty {
+            arguments["tag"] = .string(tag)
+        }
+
+        let text = try await callTool("query_download_tasks", arguments: arguments)
+        return try decodeArray(MoviePilotDownloadTask.self, fromToolText: text)
+    }
+
+    func updateSubscription(id: Int, state: String) async throws -> String {
+        try await callTool(
+            "update_subscribe",
+            arguments: [
+                "subscribe_id": .int(id),
+                "state": .string(state)
+            ]
+        )
+    }
+
+    func deleteSubscription(id: Int) async throws -> String {
+        try await callTool(
+            "delete_subscribe",
+            arguments: [
+                "subscribe_id": .int(id)
+            ]
+        )
+    }
+
+    func modifyDownload(hash: String, downloader: String? = nil, action: String) async throws -> String {
+        var arguments: [String: MoviePilotJSONValue] = [
+            "hash": .string(hash),
+            "action": .string(action)
+        ]
+        if let downloader, !downloader.isEmpty {
+            arguments["downloader"] = .string(downloader)
+        }
+        return try await callTool("modify_download", arguments: arguments)
+    }
+
+    func deleteDownload(hash: String, downloader: String? = nil, deleteFiles: Bool = false) async throws -> String {
+        var arguments: [String: MoviePilotJSONValue] = [
+            "hash": .string(hash),
+            "delete_files": .bool(deleteFiles)
+        ]
+        if let downloader, !downloader.isEmpty {
+            arguments["downloader"] = .string(downloader)
+        }
+        return try await callTool("delete_download", arguments: arguments)
+    }
+
     func fetchStatus(for target: MoviePilotMediaTarget) async throws -> MoviePilotMediaStatus {
         guard target.tmdbId != nil else {
             throw MoviePilotError.toolFailed("这个条目缺少 TMDB ID，无法匹配 MoviePilot 状态")
@@ -99,17 +194,12 @@ actor MoviePilotAPIClient {
     }
 
     private func querySubscribes(for target: MoviePilotMediaTarget) async throws -> [MoviePilotSubscription] {
-        var arguments: [String: MoviePilotJSONValue] = [
-            "status": .string("all"),
-            "media_type": .string(target.kind.rawValue),
-            "page": .int(1)
-        ]
-        if let tmdbId = target.tmdbId {
-            arguments["tmdb_id"] = .int(tmdbId)
-        }
-
-        let text = try await callTool("query_subscribes", arguments: arguments)
-        return try decodeArray(MoviePilotSubscription.self, fromToolText: text)
+        try await fetchSubscriptions(
+            status: "all",
+            mediaType: target.kind.rawValue,
+            tmdbId: target.tmdbId,
+            page: 1
+        )
     }
 
     private func queryLibraryExists(for target: MoviePilotMediaTarget) async throws -> [MoviePilotLibraryLookupItem] {
@@ -125,14 +215,7 @@ actor MoviePilotAPIClient {
     }
 
     private func queryDownloadTasks(for target: MoviePilotMediaTarget) async throws -> [MoviePilotDownloadTask] {
-        let text = try await callTool(
-            "query_download_tasks",
-            arguments: [
-                "status": .string("all"),
-                "title": .string(target.title)
-            ]
-        )
-        let downloads = try decodeArray(MoviePilotDownloadTask.self, fromToolText: text)
+        let downloads = try await fetchDownloadTasks(status: "all", title: target.title)
         guard let tmdbId = target.tmdbId else { return downloads }
 
         let matchedByMedia = downloads.filter { $0.media?.tmdbid == tmdbId }
@@ -143,6 +226,25 @@ actor MoviePilotAPIClient {
             let haystack = [task.title, task.name, task.media?.title].compactMap { $0?.lowercased() }
             return haystack.contains { $0.contains(target.title.lowercased()) }
         }
+    }
+
+    private func fetchSubscriptionsPage(
+        status: String,
+        mediaType: String,
+        tmdbId: Int?,
+        page: Int
+    ) async throws -> [MoviePilotSubscription] {
+        var arguments: [String: MoviePilotJSONValue] = [
+            "status": .string(status),
+            "media_type": .string(mediaType),
+            "page": .int(page)
+        ]
+        if let tmdbId {
+            arguments["tmdb_id"] = .int(tmdbId)
+        }
+
+        let text = try await callTool("query_subscribes", arguments: arguments)
+        return try decodeArray(MoviePilotSubscription.self, fromToolText: text)
     }
 
     private func callTool(_ toolName: String, arguments: [String: MoviePilotJSONValue]) async throws -> String {

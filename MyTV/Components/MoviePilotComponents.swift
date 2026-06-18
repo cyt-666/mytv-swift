@@ -116,6 +116,9 @@ struct MoviePilotStatusPanel: View {
     let viewModel: MoviePilotMediaViewModel
     let onConfigure: () -> Void
 
+    @State private var subscriptionToDelete: MoviePilotSubscription?
+    @State private var downloadToDelete: MoviePilotDownloadTask?
+
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
@@ -148,6 +151,11 @@ struct MoviePilotStatusPanel: View {
                     tint: viewModel.status.hasSubscription ? .indigo : .secondary
                 )
                 statusRow(title: "下载", value: viewModel.downloadLabel, icon: "arrow.down.circle.fill", tint: viewModel.status.downloads.isEmpty ? .secondary : .blue)
+
+                if !viewModel.status.subscriptions.isEmpty || !viewModel.status.downloads.isEmpty {
+                    Divider()
+                    actionRows
+                }
             } else {
                 Button {
                     onConfigure()
@@ -183,6 +191,50 @@ struct MoviePilotStatusPanel: View {
         .task(id: target) {
             await viewModel.loadStatusIfNeeded(for: target)
         }
+        .confirmationDialog("删除订阅", isPresented: subscriptionDeleteDialog, titleVisibility: .visible) {
+            Button("删除订阅", role: .destructive) {
+                if let subscription = subscriptionToDelete {
+                    Task { await viewModel.deleteSubscription(subscription, target: target) }
+                }
+                subscriptionToDelete = nil
+            }
+            Button("取消", role: .cancel) {
+                subscriptionToDelete = nil
+            }
+        } message: {
+            Text(subscriptionToDelete?.displayTitle ?? "确认删除这个 MoviePilot 订阅？")
+        }
+        .confirmationDialog("删除下载任务", isPresented: downloadDeleteDialog, titleVisibility: .visible) {
+            Button("删除任务", role: .destructive) {
+                if let download = downloadToDelete {
+                    Task { await viewModel.deleteDownload(download, deleteFiles: false, target: target) }
+                }
+                downloadToDelete = nil
+            }
+            Button("删除任务并删除文件", role: .destructive) {
+                if let download = downloadToDelete {
+                    Task { await viewModel.deleteDownload(download, deleteFiles: true, target: target) }
+                }
+                downloadToDelete = nil
+            }
+            Button("取消", role: .cancel) {
+                downloadToDelete = nil
+            }
+        } message: {
+            Text("默认只从下载器删除任务，不删除已下载文件。")
+        }
+    }
+
+    private var actionRows: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            ForEach(viewModel.status.subscriptions) { subscription in
+                subscriptionActionRow(subscription)
+            }
+
+            ForEach(viewModel.status.downloads) { download in
+                downloadActionRow(download)
+            }
+        }
     }
 
     private func statusRow(title: String, value: String, icon: String, tint: Color) -> some View {
@@ -204,6 +256,110 @@ struct MoviePilotStatusPanel: View {
                     .lineLimit(2)
             }
         }
+    }
+
+    private func subscriptionActionRow(_ subscription: MoviePilotSubscription) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: subscription.isPaused ? "pause.circle.fill" : "checkmark.circle.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(subscription.isPaused ? Color.orange : Color.indigo)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(subscription.displayTitle)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Text("订阅 · \(subscription.stateLabel)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            Button {
+                Task { await viewModel.setSubscription(subscription, paused: !subscription.isPaused, target: target) }
+            } label: {
+                Image(systemName: subscription.isPaused ? "play.fill" : "pause.fill")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .disabled(viewModel.isPerformingAction)
+            .help(subscription.isPaused ? "恢复订阅" : "暂停订阅")
+
+            Button(role: .destructive) {
+                subscriptionToDelete = subscription
+            } label: {
+                Image(systemName: "trash")
+            }
+            .buttonStyle(.borderless)
+            .controlSize(.small)
+            .disabled(viewModel.isPerformingAction)
+            .help("删除订阅")
+        }
+    }
+
+    private func downloadActionRow(_ download: MoviePilotDownloadTask) -> some View {
+        HStack(spacing: 8) {
+            Image(systemName: download.isPaused ? "pause.circle.fill" : "arrow.down.circle.fill")
+                .font(.system(size: 11, weight: .bold))
+                .foregroundStyle(download.isPaused ? Color.orange : Color.blue)
+                .frame(width: 20, height: 20)
+
+            VStack(alignment: .leading, spacing: 1) {
+                Text(download.displayTitle)
+                    .font(.system(size: 11, weight: .semibold))
+                    .lineLimit(1)
+                Text("下载 · \(download.stateLabel)")
+                    .font(.system(size: 10, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(1)
+            }
+
+            Spacer(minLength: 8)
+
+            if download.canModify {
+                Button {
+                    Task { await viewModel.setDownload(download, paused: !download.isPaused, target: target) }
+                } label: {
+                    Image(systemName: download.isPaused ? "play.fill" : "pause.fill")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(viewModel.isPerformingAction)
+                .help(download.isPaused ? "恢复下载" : "暂停下载")
+            }
+
+            if download.canDelete {
+                Button(role: .destructive) {
+                    downloadToDelete = download
+                } label: {
+                    Image(systemName: "trash")
+                }
+                .buttonStyle(.borderless)
+                .controlSize(.small)
+                .disabled(viewModel.isPerformingAction)
+                .help("删除下载任务")
+            }
+        }
+    }
+
+    private var subscriptionDeleteDialog: Binding<Bool> {
+        Binding(
+            get: { subscriptionToDelete != nil },
+            set: { isPresented in
+                if !isPresented { subscriptionToDelete = nil }
+            }
+        )
+    }
+
+    private var downloadDeleteDialog: Binding<Bool> {
+        Binding(
+            get: { downloadToDelete != nil },
+            set: { isPresented in
+                if !isPresented { downloadToDelete = nil }
+            }
+        )
     }
 }
 

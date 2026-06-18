@@ -134,25 +134,55 @@ struct SettingsView: View {
 
                 Divider()
 
-                HStack(alignment: .center, spacing: 12) {
-                    VStack(alignment: .leading, spacing: 4) {
-                        Text("入库通知")
-                            .font(.system(size: 14, weight: .semibold))
-                        Text("通知权限：\(notificationService.authorizationStatusText)")
-                            .font(.system(size: 12, weight: .medium))
-                            .foregroundStyle(.secondary)
+                VStack(alignment: .leading, spacing: 12) {
+                    HStack(alignment: .center, spacing: 12) {
+                        VStack(alignment: .leading, spacing: 4) {
+                            Text("MoviePilot 通知")
+                                .font(.system(size: 14, weight: .semibold))
+                            Text("通知权限：\(notificationService.authorizationStatusText)")
+                                .font(.system(size: 12, weight: .medium))
+                                .foregroundStyle(.secondary)
+                        }
+
+                        Spacer()
+
+                        Toggle("", isOn: Binding(
+                            get: { viewModel.moviePilotNotificationsEnabled },
+                            set: { enabled in
+                                Task { await viewModel.setMoviePilotNotificationsEnabled(enabled) }
+                            }
+                        ))
+                        .toggleStyle(.switch)
+                        .labelsHidden()
                     }
 
-                    Spacer()
-
-                    Toggle("", isOn: Binding(
-                        get: { viewModel.moviePilotNotificationsEnabled },
-                        set: { enabled in
-                            Task { await viewModel.setMoviePilotNotificationsEnabled(enabled) }
+                    VStack(spacing: 8) {
+                        ForEach(MoviePilotNotificationCategory.allCases) { category in
+                            Toggle(isOn: Binding(
+                                get: { viewModel.moviePilotNotificationCategories.contains(category) },
+                                set: { enabled in
+                                    viewModel.setMoviePilotNotificationCategory(category, enabled: enabled)
+                                }
+                            )) {
+                                Label {
+                                    VStack(alignment: .leading, spacing: 2) {
+                                        Text(category.displayName)
+                                            .font(.system(size: 13, weight: .semibold))
+                                        Text(category.settingsDescription)
+                                            .font(.system(size: 11, weight: .medium))
+                                            .foregroundStyle(.secondary)
+                                    }
+                                } icon: {
+                                    Image(systemName: category.systemImage)
+                                }
+                            }
+                            .toggleStyle(.switch)
+                            .disabled(!viewModel.moviePilotNotificationsEnabled)
                         }
-                    ))
-                    .toggleStyle(.switch)
-                    .labelsHidden()
+                    }
+                    .padding(12)
+                    .background(.thinMaterial)
+                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
                 }
 
                 if notificationService.authorizationStatus == .denied {
