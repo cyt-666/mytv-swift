@@ -12,27 +12,40 @@ final class ShowsViewModel {
     var isLoading = false
     var isLoadingMore = false
     var canLoadMore = true
+    var errorMessage: String?
 
     private var page = 1
     private let pageSize = 20
+    private let loadMoreThreshold = 6
 
-    func load() async {
-        page = 1
-        canLoadMore = true
+    func load(reset: Bool = true) async {
+        guard !isLoading else { return }
+
+        if reset {
+            page = 1
+            canLoadMore = true
+            items = []
+        }
+
+        errorMessage = nil
         isLoading = true
         defer { isLoading = false }
 
         do {
-            items = try await fetchPage(page)
-            canLoadMore = items.count == pageSize
+            let newItems = try await fetchPage(page)
+            items = newItems
+            canLoadMore = newItems.count == pageSize
         } catch {
-            print("加载剧集列表失败: \(error)")
+            errorMessage = "加载剧集列表失败: \(error.localizedDescription)"
+            canLoadMore = false
+            print(errorMessage ?? "加载剧集列表失败")
         }
     }
 
-    func loadMoreIfNeeded() async {
-        guard canLoadMore, !isLoading, !isLoadingMore else { return }
+    func loadMoreIfNeeded(currentItem: ShowDTO? = nil) async {
+        guard shouldLoadMore(for: currentItem) else { return }
 
+        errorMessage = nil
         isLoadingMore = true
         defer { isLoadingMore = false }
 
@@ -40,11 +53,29 @@ final class ShowsViewModel {
             let nextPage = page + 1
             let newItems = try await fetchPage(nextPage)
             page = nextPage
-            items.append(contentsOf: newItems)
-            canLoadMore = newItems.count == pageSize
+            let appendedCount = appendUnique(newItems)
+            canLoadMore = newItems.count == pageSize && appendedCount > 0
         } catch {
-            print("加载更多剧集失败: \(error)")
+            errorMessage = "加载更多剧集失败: \(error.localizedDescription)"
+            print(errorMessage ?? "加载更多剧集失败")
         }
+    }
+
+    private func shouldLoadMore(for currentItem: ShowDTO?) -> Bool {
+        guard canLoadMore, !isLoading, !isLoadingMore else { return false }
+        guard let currentItem else { return true }
+        guard let index = items.firstIndex(where: { $0.ids.trakt == currentItem.ids.trakt }) else {
+            return false
+        }
+        let thresholdIndex = max(items.count - loadMoreThreshold, 0)
+        return index >= thresholdIndex
+    }
+
+    private func appendUnique(_ newItems: [ShowDTO]) -> Int {
+        let existingIds = Set(items.map(\.ids.trakt))
+        let uniqueItems = newItems.filter { !existingIds.contains($0.ids.trakt) }
+        items.append(contentsOf: uniqueItems)
+        return uniqueItems.count
     }
 
     private func fetchPage(_ page: Int) async throws -> [ShowDTO] {
