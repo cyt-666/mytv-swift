@@ -4,10 +4,13 @@ struct MovieDetailView: View {
     let movieId: Int
     @State private var viewModel: MovieDetailViewModel?
     @State private var listActionViewModel = MediaListActionViewModel()
+    @State private var moviePilotViewModel = MoviePilotMediaViewModel()
+    @Environment(AppState.self) private var appState
 
     var body: some View {
         Group {
             if let viewModel, let movie = viewModel.movie {
+                let moviePilotTarget = MoviePilotMediaTarget.movie(movie)
                 ScrollView {
                     VStack(spacing: 0) {
                         movieHero(movie: movie, translation: viewModel.translation)
@@ -56,6 +59,12 @@ struct MovieDetailView: View {
                             }
 
                             VStack(spacing: 12) {
+                                MoviePilotStatusPanel(
+                                    target: moviePilotTarget,
+                                    viewModel: moviePilotViewModel,
+                                    onConfigure: navigateToSettings
+                                )
+
                                 if let rating = movie.rating {
                                     DetailStatTile(
                                         title: "Trakt 评分",
@@ -100,6 +109,7 @@ struct MovieDetailView: View {
         let title = translation?.title ?? movie.title
         let tagline = translation?.tagline ?? movie.tagline
         let backdropURL = movie.images?.fanart?.first ?? movie.images?.poster?.first
+        let moviePilotTarget = MoviePilotMediaTarget.movie(movie)
 
         return ZStack(alignment: .bottomLeading) {
             DetailHeroArtworkView(urlString: backdropURL, height: 420, dimming: 0.18)
@@ -138,10 +148,18 @@ struct MovieDetailView: View {
                         }
                     }
 
-                    MediaListActionMenu(
-                        target: .movie(movie.ids.trakt),
-                        viewModel: listActionViewModel
-                    )
+                    HStack(spacing: 10) {
+                        MediaListActionMenu(
+                            target: .movie(movie.ids.trakt),
+                            viewModel: listActionViewModel
+                        )
+
+                        MoviePilotSubscribeButton(
+                            target: moviePilotTarget,
+                            viewModel: moviePilotViewModel,
+                            onConfigure: navigateToSettings
+                        )
+                    }
                 }
                 .frame(maxWidth: 720, alignment: .leading)
             }
@@ -159,6 +177,10 @@ struct MovieDetailView: View {
                 Task { await viewModel.postComment() }
             }
         )
+    }
+
+    private func navigateToSettings() {
+        appState.navigate(to: .settings)
     }
 }
 

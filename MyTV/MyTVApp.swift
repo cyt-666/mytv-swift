@@ -35,6 +35,7 @@ struct MyTVApp: App {
                     AuthService.shared.configure(modelContext: context)
                     CacheService.clearExpired()
                     CacheService.invalidateUserDataOnLaunch()
+                    MoviePilotNotificationService.shared.configure()
                 }
         }
         .windowStyle(.hiddenTitleBar)
