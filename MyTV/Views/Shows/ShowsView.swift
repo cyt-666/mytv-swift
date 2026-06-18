@@ -10,11 +10,33 @@ struct ShowsView: View {
                     ProgressView()
                         .frame(maxWidth: .infinity)
                         .padding(.top, 36)
+                } else if let errorMessage = viewModel.errorMessage, viewModel.items.isEmpty {
+                    ContentUnavailableView {
+                        Text(errorMessage)
+                    } actions: {
+                        Button("重试") {
+                            Task { await viewModel.load() }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 360)
                 } else {
-                    MediaGridView(items: viewModel.items.map { .show($0) }) { _ in }
-                        .padding(.horizontal, 20)
+                    MediaGridView(
+                        items: viewModel.items.map { .show($0) },
+                        onItemAppear: { item in
+                            guard case .show(let show) = item else { return }
+                            Task { await viewModel.loadMoreIfNeeded(currentItem: show) }
+                        }
+                    )
+                    .padding(.horizontal, 20)
 
-                    loadMoreTrigger
+                    PaginationFooterView(
+                        isLoadingMore: viewModel.isLoadingMore,
+                        canLoadMore: viewModel.canLoadMore,
+                        errorMessage: viewModel.errorMessage,
+                        onRetry: {
+                            Task { await viewModel.loadMoreIfNeeded() }
+                        }
+                    )
                 }
             }
             .padding(.top, 24)
@@ -45,28 +67,6 @@ struct ShowsView: View {
                 }
                 .disabled(viewModel.isLoading || viewModel.isLoadingMore)
                 .help("刷新")
-            }
-        }
-    }
-
-    private var loadMoreTrigger: some View {
-        Group {
-            if viewModel.canLoadMore {
-                HStack {
-                    if viewModel.isLoadingMore {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        ProgressView()
-                            .controlSize(.small)
-                            .opacity(0)
-                    }
-                }
-                .frame(maxWidth: .infinity)
-                .padding(.vertical, 16)
-                .onAppear {
-                    Task { await viewModel.loadMoreIfNeeded() }
-                }
             }
         }
     }

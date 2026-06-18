@@ -7,9 +7,18 @@ struct SearchView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if viewModel.isLoading {
+                if viewModel.isLoading && viewModel.results.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity, maxHeight: .infinity)
+                } else if let errorMessage = viewModel.errorMessage, viewModel.results.isEmpty {
+                    ContentUnavailableView {
+                        Text(errorMessage)
+                    } actions: {
+                        Button("重试") {
+                            Task { await viewModel.load(query: query, reset: true) }
+                        }
+                    }
+                    .frame(maxWidth: .infinity, minHeight: 360)
                 } else if viewModel.results.isEmpty {
                     ContentUnavailableView(
                         "未找到结果",
@@ -17,14 +26,28 @@ struct SearchView: View {
                         description: Text("尝试其他关键词")
                     )
                 } else {
-                    MediaGridView(items: viewModel.results) { _ in }
-                        .padding(.horizontal, 20)
-                        .padding(.top, 60)
+                    MediaGridView(
+                        items: viewModel.results,
+                        onItemAppear: { item in
+                            Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
+                        }
+                    )
+                    .padding(.horizontal, 20)
+                    .padding(.top, 60)
+
+                    PaginationFooterView(
+                        isLoadingMore: viewModel.isLoadingMore,
+                        canLoadMore: viewModel.canLoadMore,
+                        errorMessage: viewModel.errorMessage,
+                        onRetry: {
+                            Task { await viewModel.loadMoreIfNeeded() }
+                        }
+                    )
                 }
             }
         }
-        .task {
-            await viewModel.search(query: query)
+        .task(id: query) {
+            await viewModel.load(query: query, reset: true)
         }
     }
 }

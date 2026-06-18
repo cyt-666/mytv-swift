@@ -2,23 +2,20 @@ import SwiftUI
 
 struct RecommendationsView: View {
     let type: String // "movies" or "shows"
-    @State private var movies: [MovieDTO] = []
-    @State private var shows: [ShowDTO] = []
-    @State private var isLoading = true
-    @State private var errorMessage: String?
+    @State private var viewModel = RecommendationsViewModel()
 
     var title: String { type == "movies" ? "推荐电影" : "推荐剧集" }
 
     var body: some View {
         Group {
-            if isLoading && movies.isEmpty && shows.isEmpty {
+            if viewModel.isLoading && viewModel.items.isEmpty {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
-            } else if let error = errorMessage {
+            } else if let error = viewModel.errorMessage, viewModel.items.isEmpty {
                 ContentUnavailableView {
                     Text(error)
                 } actions: {
-                    Button("重试") { Task { await load() } }
+                    Button("重试") { Task { await viewModel.load(type: type, reset: true) } }
                 }
             } else {
                 ScrollView {
@@ -28,49 +25,79 @@ struct RecommendationsView: View {
                             .padding(.horizontal, 20)
                             .padding(.top, 60)
 
-                        MediaGridView(items: items)
-                            .padding(.horizontal, 20)
-                            .padding(.bottom, 40)
+                        MediaGridView(
+                            items: viewModel.items
+                        )
+                        .padding(.horizontal, 20)
                     }
                 }
             }
         }
-        .task { await load() }
+        .task(id: type) { await viewModel.load(type: type, reset: true) }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { await load() }
+                    Task {
+                        CacheService.clearAllAPIResponses()
+                        await viewModel.load(type: type, reset: true)
+                    }
                 } label: {
                     Image(systemName: "arrow.clockwise")
-                        .symbolEffect(.rotate, isActive: isLoading)
+                        .symbolEffect(.rotate, isActive: viewModel.isLoading)
                 }
-                .disabled(isLoading)
+                .disabled(viewModel.isLoading)
                 .help("刷新")
             }
         }
     }
+}
 
-    private var items: [MediaItem] {
+@Observable
+@MainActor
+private final class RecommendationsViewModel {
+    var items: [MediaItem] = []
+    var isLoading = false
+    var errorMessage: String?
+
+    private var type = ""
+    private let recommendationLimit = 100
+
+    func load(type: String, reset: Bool = true) async {
+        guard !isLoading else { return }
+
+        if reset || type != self.type {
+            self.type = type
+            items = []
+        }
+
+        errorMessage = nil
+        isLoading = true
+        defer { isLoading = false }
+
+        do {
+            let newItems = try await fetchRecommendations()
+            items = uniqueItems(from: newItems)
+        } catch {
+            errorMessage = "加载失败: \(error.localizedDescription)"
+        }
+    }
+
+    private func fetchRecommendations() async throws -> [MediaItem] {
         if type == "movies" {
+            let movies = try await RecommendationAPI.movies(limit: recommendationLimit)
             return movies.map { .movie($0) }
         } else {
+            let shows = try await RecommendationAPI.shows(limit: recommendationLimit)
             return shows.map { .show($0) }
         }
     }
 
-    private func load() async {
-        isLoading = true
-        errorMessage = nil
-        defer { isLoading = false }
-
-        do {
-            if type == "movies" {
-                movies = try await RecommendationAPI.movies()
-            } else {
-                shows = try await RecommendationAPI.shows()
-            }
-        } catch {
-            errorMessage = "加载失败: \(error.localizedDescription)"
+    private func uniqueItems(from newItems: [MediaItem], excluding existingIds: Set<String> = []) -> [MediaItem] {
+        var seenIds = existingIds
+        return newItems.filter { item in
+            guard !seenIds.contains(item.id) else { return false }
+            seenIds.insert(item.id)
+            return true
         }
     }
 }
