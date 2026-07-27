@@ -64,6 +64,7 @@ struct DetailMarkWatchedButton: View {
     let isSubmitting: Bool
     let isCheckingStatus: Bool
     let isWatched: Bool
+    let watchedAt: Date?
     let message: String?
     let errorMessage: String?
     let onMark: (Date) async -> Bool
@@ -132,7 +133,9 @@ struct DetailMarkWatchedButton: View {
         if isCheckingStatus {
             return L10n.string("检查中...")
         }
-        return isWatched ? L10n.string("已看") : L10n.string("标记已看")
+        guard isWatched else { return L10n.string("标记已看") }
+        guard let watchedAt else { return L10n.string("已看") }
+        return L10n.string("已看 · %@", DetailWatchedDateFormatter.display(watchedAt))
     }
 
     private var buttonIcon: String {

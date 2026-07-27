@@ -405,6 +405,7 @@
 "标记中..." = "Marking...";
 "标记已看" = "Mark Watched";
 "已看" = "Watched";
+"已看 · %@" = "Watched · %@";
 "标记这个条目为已看" = "Mark this item as watched";
 "此条目已看，可继续添加观看记录" = "Watched. You can add another watch record.";
 "Trakt 已同步此条目的已看状态" = "Trakt has synced this item's watched status";

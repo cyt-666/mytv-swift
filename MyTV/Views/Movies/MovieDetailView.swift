@@ -169,6 +169,7 @@ struct MovieDetailView: View {
                         isSubmitting: detailViewModel.isMarkingWatched,
                         isCheckingStatus: detailViewModel.isLoadingWatchedStatus,
                         isWatched: detailViewModel.isWatched,
+                        watchedAt: detailViewModel.watchedAt,
                         message: detailViewModel.watchedMessage,
                         errorMessage: detailViewModel.watchedErrorMessage,
                         onMark: { date in
