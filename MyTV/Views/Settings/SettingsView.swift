@@ -1,22 +1,38 @@
 import SwiftUI
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 
 struct SettingsView: View {
+    @Environment(AppState.self) private var appState
     @State private var authService = AuthService.shared
     @State private var viewModel = SettingsViewModel()
     @State private var notificationService = MoviePilotNotificationService.shared
     @State private var showLogoutConfirm = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var sectionHorizontalPadding: CGFloat {
+        isCompact ? 16 : 20
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
                 Text("设置")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: isCompact ? 30 : 34, weight: .bold))
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(.horizontal, 20)
-                    .padding(.top, 72)
+                    .padding(.horizontal, sectionHorizontalPadding)
+                    .padding(.top, isCompact ? 18 : 72)
 
                 // Account section
+                languageSection
+
                 VStack(alignment: .leading, spacing: 12) {
                     Text("账号")
                         .font(.headline)
@@ -40,7 +56,8 @@ struct SettingsView: View {
                         .buttonStyle(.borderedProminent)
                     }
                 }
-                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, sectionHorizontalPadding)
 
                 moviePilotSection
 
@@ -50,7 +67,7 @@ struct SettingsView: View {
                         .font(.headline)
 
                     HStack {
-                        Text("MyTV for macOS")
+                        Text(AppConstants.platformDisplayName)
                         Spacer()
                         Text(AppConstants.displayVersion)
                             .foregroundStyle(.secondary)
@@ -59,8 +76,10 @@ struct SettingsView: View {
                     .background(.ultraThinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8))
                 }
-                .padding(.horizontal, 20)
+                .frame(maxWidth: .infinity, alignment: .leading)
+                .padding(.horizontal, sectionHorizontalPadding)
             }
+            .frame(maxWidth: .infinity, alignment: .topLeading)
         }
         .alert("确认退出登录", isPresented: $showLogoutConfirm) {
             Button("取消", role: .cancel) {}
@@ -76,9 +95,56 @@ struct SettingsView: View {
         }
     }
 
+    private var languageSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            Text("语言")
+                .font(.headline)
+
+            HStack(alignment: .center, spacing: 12) {
+                Image(systemName: "globe")
+                    .font(.system(size: 18, weight: .semibold))
+                    .foregroundStyle(.blue)
+                    .frame(width: 34, height: 34)
+                    .background(.blue.opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("界面语言")
+                        .font(.system(size: 14, weight: .semibold))
+
+                    Text("修改后会立即应用到 MyTV 的界面文案。")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer(minLength: 8)
+
+                Picker("界面语言", selection: Binding(
+                    get: { appState.appLanguage },
+                    set: { appState.setAppLanguage($0) }
+                )) {
+                    ForEach(AppLanguage.allCases) { language in
+                        Text(language.localizedNameKey)
+                            .tag(language)
+                    }
+                }
+                .labelsHidden()
+                .pickerStyle(.menu)
+                .fixedSize()
+            }
+            .padding(isCompact ? 14 : 16)
+            .frame(maxWidth: .infinity, alignment: .leading)
+            .background(.ultraThinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8))
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, sectionHorizontalPadding)
+    }
+
     private var moviePilotSection: some View {
         VStack(alignment: .leading, spacing: 12) {
-            Text("MoviePilot")
+            Text("媒体助手")
                 .font(.headline)
 
             VStack(alignment: .leading, spacing: 14) {
@@ -101,45 +167,22 @@ struct SettingsView: View {
                     Spacer()
                 }
 
-                TextField("MoviePilot 地址", text: $viewModel.moviePilotHost)
+                TextField("媒体助手地址", text: $viewModel.moviePilotHost)
                     .textFieldStyle(.roundedBorder)
 
                 SecureField("API Key", text: $viewModel.moviePilotAPIKey)
                     .textFieldStyle(.roundedBorder)
 
-                HStack(spacing: 10) {
-                    Button {
-                        Task { await viewModel.testMoviePilotConnection() }
-                    } label: {
-                        Label(viewModel.isTestingMoviePilot ? "测试中..." : "测试连接", systemImage: "network")
-                    }
-                    .disabled(viewModel.isTestingMoviePilot || viewModel.isSavingMoviePilot)
-
-                    Button {
-                        Task { await viewModel.saveMoviePilotSettings() }
-                    } label: {
-                        Label(viewModel.isSavingMoviePilot ? "保存中..." : "保存", systemImage: "checkmark.circle")
-                    }
-                    .buttonStyle(.borderedProminent)
-                    .disabled(viewModel.isTestingMoviePilot || viewModel.isSavingMoviePilot)
-
-                    Button(role: .destructive) {
-                        viewModel.clearMoviePilotSettings()
-                    } label: {
-                        Label("清除", systemImage: "trash")
-                    }
-
-                    Spacer()
-                }
+                connectionButtons
 
                 Divider()
 
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
-                            Text("MoviePilot 通知")
+                            Text("媒体助手通知")
                                 .font(.system(size: 14, weight: .semibold))
-                            Text("通知权限：\(notificationService.authorizationStatusText)")
+                            Text(L10n.string("通知权限：%@", notificationService.authorizationStatusText))
                                 .font(.system(size: 12, weight: .medium))
                                 .foregroundStyle(.secondary)
                         }
@@ -212,10 +255,65 @@ struct SettingsView: View {
                 }
             }
             .padding()
+            .frame(maxWidth: .infinity, alignment: .leading)
             .background(.ultraThinMaterial)
             .clipShape(RoundedRectangle(cornerRadius: 8))
         }
-        .padding(.horizontal, 20)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .padding(.horizontal, sectionHorizontalPadding)
+    }
+
+    private var connectionButtons: some View {
+        Group {
+            if isCompact {
+                VStack(spacing: 10) {
+                    moviePilotTestButton
+                    moviePilotSaveButton
+                    moviePilotClearButton
+                }
+            } else {
+                HStack(spacing: 10) {
+                    moviePilotTestButton
+                    moviePilotSaveButton
+                    moviePilotClearButton
+                    Spacer()
+                }
+            }
+        }
+    }
+
+    private var moviePilotTestButton: some View {
+        Button {
+            Task { await viewModel.testMoviePilotConnection() }
+        } label: {
+            Label(viewModel.isTestingMoviePilot ? L10n.string("测试中...") : L10n.string("测试连接"), systemImage: "network")
+                .frame(maxWidth: isCompact ? .infinity : nil)
+        }
+        .disabled(viewModel.isTestingMoviePilot || viewModel.isSavingMoviePilot)
+    }
+
+    private var moviePilotSaveButton: some View {
+        Button {
+            Task {
+                await viewModel.saveMoviePilotSettings()
+                appState.refreshMediaAssistantConfiguration()
+            }
+        } label: {
+            Label(viewModel.isSavingMoviePilot ? L10n.string("保存中...") : L10n.string("保存"), systemImage: "checkmark.circle")
+                .frame(maxWidth: isCompact ? .infinity : nil)
+        }
+        .buttonStyle(.borderedProminent)
+        .disabled(viewModel.isTestingMoviePilot || viewModel.isSavingMoviePilot)
+    }
+
+    private var moviePilotClearButton: some View {
+        Button(role: .destructive) {
+            viewModel.clearMoviePilotSettings()
+            appState.refreshMediaAssistantConfiguration()
+        } label: {
+            Label("清除", systemImage: "trash")
+                .frame(maxWidth: isCompact ? .infinity : nil)
+        }
     }
 
     private var moviePilotStatusIcon: String {
@@ -231,9 +329,16 @@ struct SettingsView: View {
     }
 
     private func openNotificationSettings() {
+        #if os(macOS)
         guard let url = URL(string: "x-apple.systempreferences:com.apple.Notifications-Settings.extension") else {
             return
         }
         NSWorkspace.shared.open(url)
+        #elseif os(iOS)
+        guard let url = URL(string: UIApplication.openSettingsURLString) else {
+            return
+        }
+        UIApplication.shared.open(url)
+        #endif
     }
 }

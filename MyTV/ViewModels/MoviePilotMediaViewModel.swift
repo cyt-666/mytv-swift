@@ -10,6 +10,7 @@ final class MoviePilotMediaViewModel {
     var message: String?
     var errorMessage: String?
 
+    private var feedbackGeneration = 0
     private var loadedTarget: MoviePilotMediaTarget?
 
     var isConfigured: Bool {
@@ -45,24 +46,23 @@ final class MoviePilotMediaViewModel {
 
     func subscribe(target: MoviePilotMediaTarget, seasons: [Int]? = nil) async {
         guard isConfigured else {
-            errorMessage = "请先配置 MoviePilot"
+            errorMessage = L10n.string("请先配置 MoviePilot")
             return
         }
         guard target.tmdbId != nil else {
-            errorMessage = "这个条目缺少 TMDB ID，无法添加 MoviePilot 订阅"
+            errorMessage = L10n.string("这个条目缺少 TMDB ID，无法添加 MoviePilot 订阅")
             return
         }
         guard !isSubscribing else { return }
 
         let selectedSeasons = seasons?.sorted()
         if target.kind == .tv, selectedSeasons?.isEmpty != false {
-            errorMessage = "请选择至少一个季度"
+            errorMessage = L10n.string("请选择至少一个季度")
             return
         }
 
         isSubscribing = true
-        message = nil
-        errorMessage = nil
+        clearFeedback()
         defer { isSubscribing = false }
 
         do {
@@ -72,9 +72,9 @@ final class MoviePilotMediaViewModel {
                     let result = try await MoviePilotAPIClient.shared.addSubscribe(target: target, season: season)
                     results.append(result)
                 }
-                message = "已提交 \(results.count) 个季度订阅"
+                showMessage(L10n.string("已提交 %d 个季度订阅", results.count))
             } else {
-                message = try await MoviePilotAPIClient.shared.addSubscribe(target: target)
+                showMessage(try await MoviePilotAPIClient.shared.addSubscribe(target: target))
             }
             await loadStatus(for: target)
         } catch {
@@ -97,13 +97,13 @@ final class MoviePilotMediaViewModel {
 
     func deleteSubscription(_ subscription: MoviePilotSubscription, target: MoviePilotMediaTarget) async {
         await performAction(refreshing: target) {
-            try await MoviePilotAPIClient.shared.deleteSubscription(id: subscription.id)
+            try await MoviePilotAPIClient.shared.deleteSubscription(subscription)
         }
     }
 
     func setDownload(_ download: MoviePilotDownloadTask, paused: Bool, target: MoviePilotMediaTarget) async {
         guard let hash = download.hash, !hash.isEmpty else {
-            errorMessage = "这个下载任务缺少 hash，无法操作"
+            errorMessage = L10n.string("这个下载任务缺少 hash，无法操作")
             return
         }
         await performAction(refreshing: target) {
@@ -115,51 +115,50 @@ final class MoviePilotMediaViewModel {
         }
     }
 
-    func deleteDownload(_ download: MoviePilotDownloadTask, deleteFiles: Bool, target: MoviePilotMediaTarget) async {
+    func deleteDownload(_ download: MoviePilotDownloadTask, target: MoviePilotMediaTarget) async {
         guard let hash = download.hash, !hash.isEmpty else {
-            errorMessage = "这个下载任务缺少 hash，无法删除"
+            errorMessage = L10n.string("这个下载任务缺少 hash，无法删除")
             return
         }
         await performAction(refreshing: target) {
             try await MoviePilotAPIClient.shared.deleteDownload(
                 hash: hash,
-                downloader: download.downloader,
-                deleteFiles: deleteFiles
+                downloader: download.downloader
             )
         }
     }
 
     var libraryLabel: String {
-        if isLoadingStatus { return "检查中..." }
+        if isLoadingStatus { return L10n.string("检查中...") }
         if status.hasLibraryItem {
             if let detail = libraryDetailLabel {
                 return detail
             }
-            return "已入库"
+            return L10n.string("已入库")
         }
-        return "未入库"
+        return L10n.string("未入库")
     }
 
     var subscriptionLabel: String {
-        if isLoadingStatus { return "检查中..." }
-        guard status.hasSubscription else { return "未订阅" }
+        if isLoadingStatus { return L10n.string("检查中...") }
+        guard status.hasSubscription else { return L10n.string("未订阅") }
 
         let seasons = status.subscriptions.compactMap(\.season).sorted()
         if !seasons.isEmpty {
             let seasonText = seasons.map { "S\($0)" }.joined(separator: ", ")
-            return "已订阅 \(seasonText)"
+            return L10n.string("已订阅 %@", seasonText)
         }
-        return "已订阅"
+        return L10n.string("已订阅")
     }
 
     var downloadLabel: String {
-        if isLoadingStatus { return "检查中..." }
-        guard !status.downloads.isEmpty else { return "无任务" }
+        if isLoadingStatus { return L10n.string("检查中...") }
+        guard !status.downloads.isEmpty else { return L10n.string("无任务") }
         let active = status.activeDownloadCount
         if active > 0 {
-            return "\(active) 个下载中"
+            return L10n.string("%d 个下载中", active)
         }
-        return "\(status.downloads.count) 个任务"
+        return L10n.string("%d 个任务", status.downloads.count)
     }
 
     private var libraryDetailLabel: String? {
@@ -171,7 +170,7 @@ final class MoviePilotMediaViewModel {
         guard !seasonPairs.isEmpty else { return nil }
         let existingEpisodes = seasonPairs.reduce(0) { $0 + $1.value.existingEpisodes.count }
         guard existingEpisodes > 0 else { return nil }
-        return "已入库 \(existingEpisodes) 集"
+        return L10n.string("已入库 %d 集", existingEpisodes)
     }
 
     private func message(for error: Error) -> String {
@@ -180,21 +179,40 @@ final class MoviePilotMediaViewModel {
 
     private func performAction(refreshing target: MoviePilotMediaTarget, action: () async throws -> String) async {
         guard isConfigured else {
-            errorMessage = "请先配置 MoviePilot"
+            errorMessage = L10n.string("请先配置 MoviePilot")
             return
         }
         guard !isPerformingAction else { return }
 
         isPerformingAction = true
-        message = nil
-        errorMessage = nil
+        clearFeedback()
         defer { isPerformingAction = false }
 
         do {
-            message = try await action()
+            showMessage(try await action())
             await loadStatus(for: target)
         } catch {
             errorMessage = message(for: error)
+        }
+    }
+
+    private func clearFeedback() {
+        feedbackGeneration += 1
+        message = nil
+        errorMessage = nil
+    }
+
+    private func showMessage(_ value: String) {
+        feedbackGeneration += 1
+        let generation = feedbackGeneration
+        message = value
+
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await MainActor.run {
+                guard let self, self.feedbackGeneration == generation else { return }
+                self.message = nil
+            }
         }
     }
 }

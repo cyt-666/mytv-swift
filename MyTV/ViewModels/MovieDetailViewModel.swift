@@ -8,6 +8,11 @@ final class MovieDetailViewModel {
     var movie: MovieDetailsDTO?
     var translation: TranslationResult?
     var isLoading = false
+    var isMarkingWatched = false
+    var isLoadingWatchedStatus = false
+    var isWatched = false
+    var watchedMessage: String?
+    var watchedErrorMessage: String?
 
     init(movieId: Int) {
         self.movieId = movieId
@@ -28,8 +33,25 @@ final class MovieDetailViewModel {
             print("加载电影详情失败: \(error)")
         }
 
+        await refreshWatchedStatus()
         translation = await TranslationService.shared.getMovieTranslation(id: movieId)
         await commentStore.loadComments()
+    }
+
+    func refreshWatchedStatus() async {
+        guard isLoggedIn else {
+            isWatched = false
+            return
+        }
+
+        isLoadingWatchedStatus = true
+        defer { isLoadingWatchedStatus = false }
+
+        do {
+            isWatched = try await UserAPI.hasWatched(type: "movies", id: movieId)
+        } catch {
+            print("同步电影已看状态失败: \(error)")
+        }
     }
 
     func postComment() async {
@@ -60,5 +82,53 @@ final class MovieDetailViewModel {
             commentStore.commentErrorMessage = CommentAPI.message(for: error)
             print("发布电影评论失败: \(error)")
         }
+    }
+
+    @discardableResult
+    func markWatched(at date: Date) async -> Bool {
+        guard isLoggedIn else {
+            watchedErrorMessage = L10n.string("登录 Trakt 后才能标记已看")
+            return false
+        }
+
+        guard let movie else {
+            watchedErrorMessage = L10n.string("条目信息还在加载")
+            return false
+        }
+
+        guard !isMarkingWatched else { return false }
+        isMarkingWatched = true
+        watchedMessage = nil
+        watchedErrorMessage = nil
+        defer { isMarkingWatched = false }
+
+        do {
+            _ = try await SyncAPI.addToHistory(movies: [movie.ids.trakt], watchedAt: date)
+            CacheService.invalidateWatchedData()
+            isWatched = true
+            watchedMessage = L10n.string("%@已标记为已看", translation?.title ?? movie.title)
+            return true
+        } catch {
+            watchedErrorMessage = Self.message(for: error)
+            print("标记电影已看失败: \(error)")
+            return false
+        }
+    }
+
+    private static func message(for error: Error) -> String {
+        if let apiError = error as? APIError {
+            switch apiError {
+            case .unauthorized, .refreshTokenFailed:
+                return L10n.string("登录状态已过期，请重新登录 Trakt")
+            case .httpError(let statusCode, _):
+                switch statusCode {
+                case 401: return L10n.string("登录 Trakt 后才能标记已看")
+                default: return L10n.string("Trakt 返回错误 %d", statusCode)
+                }
+            default:
+                return apiError.localizedDescription
+            }
+        }
+        return error.localizedDescription
     }
 }

@@ -53,6 +53,15 @@ jobs:
             CODE_SIGNING_ALLOWED=YES \
             build
 
+      - name: Build iOS Simulator
+        run: |
+          xcodebuild -project MyTV.xcodeproj \
+            -scheme MyTViOS \
+            -configuration Debug \
+            -derivedDataPath build-ios \
+            -destination 'generic/platform=iOS Simulator' \
+            build
+
       - name: Create DMG
         run: |
           cd build/Build/Products/Release

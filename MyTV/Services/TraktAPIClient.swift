@@ -10,12 +10,12 @@ enum APIError: Error, LocalizedError {
 
     var errorDescription: String? {
         switch self {
-        case .invalidURL: return "无效的 URL"
-        case .httpError(let code, _): return "HTTP 错误: \(code)"
-        case .decodingError(let err): return "数据解码失败: \(err.localizedDescription)"
-        case .noData: return "无数据返回"
-        case .unauthorized: return "未授权"
-        case .refreshTokenFailed: return "刷新 Token 失败"
+        case .invalidURL: return L10n.string("无效的 URL")
+        case .httpError(let code, _): return L10n.string("HTTP 错误: %d", code)
+        case .decodingError(let err): return L10n.string("数据解码失败: %@", err.localizedDescription)
+        case .noData: return L10n.string("无数据返回")
+        case .unauthorized: return L10n.string("未授权")
+        case .refreshTokenFailed: return L10n.string("刷新 Token 失败")
         }
     }
 }
@@ -50,6 +50,28 @@ actor TraktAPIClient {
         body: [String: Any]? = nil,
         requiresAuth: Bool = false
     ) async throws -> T {
+        let bodyData: Data?
+        if let body {
+            bodyData = try JSONSerialization.data(withJSONObject: body)
+        } else {
+            bodyData = nil
+        }
+        return try await request(
+            method: method,
+            uri: uri,
+            params: params,
+            bodyData: bodyData,
+            requiresAuth: requiresAuth
+        )
+    }
+
+    func request<T: Decodable>(
+        method: String = "GET",
+        uri: String,
+        params: [String: String]? = nil,
+        bodyData: Data?,
+        requiresAuth: Bool = false
+    ) async throws -> T {
         guard var components = URLComponents(string: AppConstants.apiBaseURL + uri) else {
             throw APIError.invalidURL
         }
@@ -69,9 +91,7 @@ actor TraktAPIClient {
             urlRequest.setValue("Bearer \(authToken)", forHTTPHeaderField: "Authorization")
         }
 
-        if let body {
-            urlRequest.httpBody = try JSONSerialization.data(withJSONObject: body)
-        }
+        urlRequest.httpBody = bodyData
 
         let (data, response) = try await session.data(for: urlRequest)
         let httpResponse = response as? HTTPURLResponse

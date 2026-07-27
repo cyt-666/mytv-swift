@@ -9,8 +9,8 @@ final class WatchlistViewModel {
 
         var title: String {
             switch self {
-            case .watchlist: return "观看清单"
-            case .customList: return "自定义列表"
+            case .watchlist: return L10n.string("观看清单")
+            case .customList: return L10n.string("自定义列表")
             }
         }
     }
@@ -29,16 +29,16 @@ final class WatchlistViewModel {
 
     var emptyTitle: String {
         if source == .customList {
-            return customLists.isEmpty ? "暂无自定义列表" : "这个列表暂无内容"
+            return customLists.isEmpty ? L10n.string("暂无自定义列表") : L10n.string("这个列表暂无内容")
         }
-        return "暂无观看清单"
+        return L10n.string("暂无观看清单")
     }
 
     var emptyDescription: String {
         if source == .customList {
-            return customLists.isEmpty ? "创建的 Trakt 自定义列表会显示在这里" : "这个自定义列表中的电影和剧集会显示在这里"
+            return customLists.isEmpty ? L10n.string("创建的 Trakt 自定义列表会显示在这里") : L10n.string("这个自定义列表中的电影和剧集会显示在这里")
         }
-        return "收藏的电影和剧集会显示在这里"
+        return L10n.string("收藏的电影和剧集会显示在这里")
     }
 
     func load() async {
@@ -54,7 +54,7 @@ final class WatchlistViewModel {
                 try await loadCustomList()
             }
         } catch {
-            errorMessage = "加载列表失败"
+            errorMessage = L10n.string("加载列表失败")
             print("加载列表失败: \(error)")
         }
     }
@@ -116,8 +116,8 @@ final class WatchlistViewModel {
     }
 
     func customListTitle(for listId: Int?) -> String {
-        guard let listId else { return "选择列表" }
-        return customLists.first { $0.ids.trakt == listId }?.name ?? "选择列表"
+        guard let listId else { return L10n.string("选择列表") }
+        return customLists.first { $0.ids.trakt == listId }?.name ?? L10n.string("选择列表")
     }
 }
 

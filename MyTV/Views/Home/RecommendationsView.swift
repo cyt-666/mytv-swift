@@ -4,7 +4,7 @@ struct RecommendationsView: View {
     let type: String // "movies" or "shows"
     @State private var viewModel = RecommendationsViewModel()
 
-    var title: String { type == "movies" ? "推荐电影" : "推荐剧集" }
+    var title: String { type == "movies" ? L10n.string("推荐电影") : L10n.string("推荐剧集") }
 
     var body: some View {
         Group {
@@ -78,7 +78,7 @@ private final class RecommendationsViewModel {
             let newItems = try await fetchRecommendations()
             items = uniqueItems(from: newItems)
         } catch {
-            errorMessage = "加载失败: \(error.localizedDescription)"
+            errorMessage = L10n.string("加载失败: %@", error.localizedDescription)
         }
     }
 

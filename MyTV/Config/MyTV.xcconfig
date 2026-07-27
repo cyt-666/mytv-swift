@@ -1,0 +1,6 @@
+#include? "Local.xcconfig"
+
+// Local.xcconfig is intentionally ignored by git.
+// It can define local-only settings such as:
+// TRAKT_CLIENT_ID = your_client_id
+// DEVELOPMENT_TEAM = your_team_id

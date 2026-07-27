@@ -6,6 +6,20 @@ struct MovieDetailView: View {
     @State private var listActionViewModel = MediaListActionViewModel()
     @State private var moviePilotViewModel = MoviePilotMediaViewModel()
     @Environment(AppState.self) private var appState
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var heroHeight: CGFloat {
+        isCompact ? 360 : (AdaptiveLayout.runsOnIOS ? 360 : 420)
+    }
+
+    private var heroTopPadding: CGFloat {
+        isCompact ? 110 : (AdaptiveLayout.runsOnIOS ? 88 : 120)
+    }
 
     var body: some View {
         Group {
@@ -13,15 +27,15 @@ struct MovieDetailView: View {
                 let moviePilotTarget = MoviePilotMediaTarget.movie(movie)
                 ScrollView {
                     VStack(spacing: 0) {
-                        movieHero(movie: movie, translation: viewModel.translation)
+                        movieHero(movie: movie, translation: viewModel.translation, detailViewModel: viewModel)
 
-                        HStack(alignment: .top, spacing: 22) {
+                        AdaptiveDetailColumns {
                             VStack(alignment: .leading, spacing: 18) {
                                 if let overview = viewModel.translation?.overview ?? movie.overview {
                                     DetailSectionCard(title: "简介") {
                                         Text(overview)
-                                            .font(.system(size: 15))
-                                            .lineSpacing(5)
+                                            .font(.system(size: isCompact ? 14 : 15))
+                                            .lineSpacing(isCompact ? 4 : 5)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
@@ -57,42 +71,44 @@ struct MovieDetailView: View {
 
                                 commentsSection(viewModel: viewModel)
                             }
-
-                            VStack(spacing: 12) {
-                                MoviePilotStatusPanel(
-                                    target: moviePilotTarget,
-                                    viewModel: moviePilotViewModel,
-                                    onConfigure: navigateToSettings
-                                )
-
-                                if let rating = movie.rating {
-                                    DetailStatTile(
-                                        title: "Trakt 评分",
-                                        value: String(format: "%.1f", rating),
-                                        icon: "star.fill",
-                                        tint: .yellow
+                        } sidebar: {
+                            VStack(spacing: isCompact ? 10 : 12) {
+                                if appState.isMediaAssistantConfigured {
+                                    MoviePilotStatusPanel(
+                                        target: moviePilotTarget,
+                                        viewModel: moviePilotViewModel,
+                                        onConfigure: navigateToSettings
                                     )
                                 }
 
-                                DetailStatTile(title: "年份", value: "\(movie.year)", icon: "calendar")
+                                DetailStatGrid {
+                                    if let rating = movie.rating {
+                                        DetailStatTile(
+                                            title: "Trakt 评分",
+                                            value: String(format: "%.1f", rating),
+                                            icon: "star.fill",
+                                            tint: .yellow
+                                        )
+                                    }
 
-                                if let runtime = movie.runtime {
-                                    DetailStatTile(title: "片长", value: "\(runtime) 分钟", icon: "clock")
-                                }
+                                    DetailStatTile(title: "年份", value: "\(movie.year)", icon: "calendar")
 
-                                if let votes = movie.votes {
-                                    DetailStatTile(title: "投票", value: "\(votes)", icon: "person.2.fill")
+                                    if let runtime = movie.runtime {
+                                        DetailStatTile(title: "片长", value: "\(runtime) 分钟", icon: "clock")
+                                    }
+
+                                    if let votes = movie.votes {
+                                        DetailStatTile(title: "投票", value: "\(votes)", icon: "person.2.fill")
+                                    }
                                 }
                             }
-                            .frame(width: 220)
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
-                        .padding(.bottom, 40)
                     }
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
                 .background(DetailBackgroundClearer())
-                .ignoresSafeArea(.container, edges: .top)
+                .detailTopSafeAreaBleed(isCompact)
+                .detailNavigationBarBackgroundHidden(isCompact)
             } else {
                 ProgressView()
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -103,57 +119,64 @@ struct MovieDetailView: View {
             self.viewModel = vm
             await vm.load()
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let viewModel else { return }
+            Task { await viewModel.refreshWatchedStatus() }
+        }
     }
 
-    private func movieHero(movie: MovieDetailsDTO, translation: TranslationResult?) -> some View {
+    private func movieHero(
+        movie: MovieDetailsDTO,
+        translation: TranslationResult?,
+        detailViewModel: MovieDetailViewModel
+    ) -> some View {
         let title = translation?.title ?? movie.title
         let tagline = translation?.tagline ?? movie.tagline
         let backdropURL = movie.images?.fanart?.first ?? movie.images?.poster?.first
         let moviePilotTarget = MoviePilotMediaTarget.movie(movie)
+        let releaseDate = DetailWatchedDateFormatter.parse(movie.released)
 
         return ZStack(alignment: .bottomLeading) {
-            DetailHeroArtworkView(urlString: backdropURL, height: 420, dimming: 0.18)
+            DetailHeroArtworkView(urlString: backdropURL, height: heroHeight, dimming: 0.18)
 
-            HStack(alignment: .bottom, spacing: 24) {
-                AsyncPosterImage(urlString: movie.images?.poster?.first)
-                    .frame(width: 170, height: 255)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .shadow(color: .black.opacity(0.38), radius: 18, y: 10)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(title)
-                        .font(.system(size: 42, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-
-                    if let tagline, !tagline.isEmpty {
-                        Text(tagline)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.78))
-                            .lineLimit(2)
+            heroContent(
+                posterURL: movie.images?.poster?.first,
+                title: title,
+                subtitle: tagline,
+                chips: {
+                    DetailMetaChip(text: "\(movie.year)", icon: "calendar", tint: .white.opacity(0.86))
+                    if let runtime = movie.runtime {
+                        DetailMetaChip(text: "\(runtime) 分钟", icon: "clock", tint: .white.opacity(0.86))
                     }
-
-                    HStack(spacing: 8) {
-                        DetailMetaChip(text: "\(movie.year)", icon: "calendar", tint: .white.opacity(0.86))
-                        if let runtime = movie.runtime {
-                            DetailMetaChip(text: "\(runtime) 分钟", icon: "clock", tint: .white.opacity(0.86))
-                        }
-                        if let rating = movie.rating {
-                            DetailMetaChip(
-                                text: String(format: "%.1f", rating),
-                                icon: "star.fill",
-                                tint: .yellow
-                            )
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        MediaListActionMenu(
-                            target: .movie(movie.ids.trakt),
-                            viewModel: listActionViewModel
+                    if let rating = movie.rating {
+                        DetailMetaChip(
+                            text: String(format: "%.1f", rating),
+                            icon: "star.fill",
+                            tint: .yellow
                         )
+                    }
+                },
+                actions: {
+                    MediaListActionMenu(
+                        target: .movie(movie.ids.trakt),
+                        viewModel: listActionViewModel
+                    )
 
+                    DetailMarkWatchedButton(
+                        title: title,
+                        releaseDate: releaseDate,
+                        releaseDateLabel: L10n.string("上映日期"),
+                        isSubmitting: detailViewModel.isMarkingWatched,
+                        isCheckingStatus: detailViewModel.isLoadingWatchedStatus,
+                        isWatched: detailViewModel.isWatched,
+                        message: detailViewModel.watchedMessage,
+                        errorMessage: detailViewModel.watchedErrorMessage,
+                        onMark: { date in
+                            await detailViewModel.markWatched(at: date)
+                        }
+                    )
+
+                    if appState.isMediaAssistantConfigured {
                         MoviePilotSubscribeButton(
                             target: moviePilotTarget,
                             viewModel: moviePilotViewModel,
@@ -161,11 +184,68 @@ struct MovieDetailView: View {
                         )
                     }
                 }
-                .frame(maxWidth: 720, alignment: .leading)
+            )
+        }
+    }
+
+    private func heroContent<Chips: View, Actions: View>(
+        posterURL: String?,
+        title: String,
+        subtitle: String?,
+        @ViewBuilder chips: () -> Chips,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        Group {
+            if isCompact {
+                heroText(title: title, subtitle: subtitle, titleSize: 23, chips: chips, actions: actions)
+                    .frame(maxWidth: .infinity, alignment: .leading)
+            } else {
+                HStack(alignment: .bottom, spacing: 24) {
+                    AsyncPosterImage(urlString: posterURL)
+                        .frame(width: 170, height: 255)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                        .shadow(color: .black.opacity(0.38), radius: 18, y: 10)
+
+                    heroText(title: title, subtitle: subtitle, titleSize: 42, chips: chips, actions: actions)
+                        .frame(maxWidth: 720, alignment: .leading)
+                }
             }
-            .padding(.horizontal, 32)
-            .padding(.bottom, 28)
-            .padding(.top, 120)
+        }
+        .padding(.horizontal, isCompact ? 16 : 32)
+        .padding(.bottom, isCompact ? 18 : 28)
+        .padding(.top, heroTopPadding)
+    }
+
+    private func heroText<Chips: View, Actions: View>(
+        title: String,
+        subtitle: String?,
+        titleSize: CGFloat,
+        @ViewBuilder chips: () -> Chips,
+        @ViewBuilder actions: () -> Actions
+    ) -> some View {
+        VStack(alignment: .leading, spacing: isCompact ? 9 : 14) {
+            Text(title)
+                .font(.system(size: titleSize, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(isCompact ? 3 : 2)
+                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: false, vertical: true)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+
+            if let subtitle, !subtitle.isEmpty {
+                Text(subtitle)
+                    .font(.system(size: isCompact ? 14 : 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(2)
+            }
+
+            FlowLayout(spacing: isCompact ? 6 : 8) {
+                chips()
+            }
+
+            DetailHeroActionGroup {
+                actions()
+            }
         }
     }
 
@@ -221,6 +301,7 @@ struct FlowLayout: Layout {
             maxX = max(maxX, x)
         }
 
-        return (CGSize(width: maxX, height: y + rowHeight), positions)
+        let resolvedWidth = maxWidth.isFinite ? min(maxX, maxWidth) : maxX
+        return (CGSize(width: resolvedWidth, height: y + rowHeight), positions)
     }
 }

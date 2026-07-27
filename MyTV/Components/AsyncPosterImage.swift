@@ -3,13 +3,13 @@ import SwiftUI
 struct AsyncPosterImage: View {
     let urlString: String?
     var contentMode: ContentMode = .fill
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
     @State private var isLoading = false
 
     var body: some View {
         Group {
             if let image {
-                Image(nsImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .aspectRatio(contentMode: contentMode)
             } else if isLoading {

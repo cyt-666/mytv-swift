@@ -3,6 +3,11 @@ import SwiftUI
 struct ProfileView: View {
     @State private var viewModel = ProfileViewModel()
     @Environment(AppState.self) private var appState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
@@ -41,8 +46,8 @@ struct ProfileView: View {
                     .frame(maxWidth: .infinity, minHeight: 360)
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 56)
+            .padding(.horizontal, isCompact ? 16 : 24)
+            .padding(.top, isCompact ? 18 : 56)
             .padding(.bottom, 36)
             .frame(maxWidth: 1180)
             .frame(maxWidth: .infinity)
@@ -68,55 +73,28 @@ struct ProfileView: View {
 private struct ProfileHeaderView: View {
     let user: UserDTO
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 22) {
-            ProfileAvatarView(user: user, size: 96)
-
-            VStack(alignment: .leading, spacing: 10) {
-                HStack(alignment: .firstTextBaseline, spacing: 10) {
-                    Text(displayName)
-                        .font(.system(size: 34, weight: .bold))
-                        .lineLimit(1)
-
-                    if user.isVIP {
-                        Label("VIP", systemImage: "checkmark.seal.fill")
-                            .font(.system(size: 12, weight: .bold))
-                            .foregroundStyle(.yellow)
-                            .labelStyle(.titleAndIcon)
-                    }
+        Group {
+            if isCompact {
+                VStack(alignment: .leading, spacing: 18) {
+                    ProfileAvatarView(user: user, size: 82)
+                    headerText
                 }
-
-                Text("@\(user.username)")
-                    .font(.system(size: 15, weight: .medium))
-                    .foregroundStyle(.secondary)
-
-                if let description = user.description, !description.isEmpty {
-                    Text(description)
-                        .font(.system(size: 14))
-                        .foregroundStyle(.secondary)
-                        .lineLimit(3)
-                        .fixedSize(horizontal: false, vertical: true)
+            } else {
+                HStack(alignment: .center, spacing: 22) {
+                    ProfileAvatarView(user: user, size: 96)
+                    headerText
+                    Spacer(minLength: 0)
                 }
-
-                HStack(spacing: 16) {
-                    if let location = user.location, !location.isEmpty {
-                        ProfileMetaLabel(icon: "mappin.and.ellipse", text: location)
-                    }
-                    if let website = user.website, !website.isEmpty {
-                        ProfileMetaLabel(icon: "link", text: website)
-                    }
-                    if let joinedAt = formattedJoinedDate {
-                        ProfileMetaLabel(icon: "calendar", text: "加入于 \(joinedAt)")
-                    }
-                }
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
             }
-
-            Spacer(minLength: 0)
         }
-        .padding(28)
+        .padding(isCompact ? 20 : 28)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background {
             ZStack {
@@ -138,6 +116,49 @@ private struct ProfileHeaderView: View {
         }
     }
 
+    private var headerText: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .firstTextBaseline, spacing: 10) {
+                Text(displayName)
+                    .font(.system(size: isCompact ? 30 : 34, weight: .bold))
+                    .lineLimit(isCompact ? 2 : 1)
+
+                if user.isVIP {
+                    Label("VIP", systemImage: "checkmark.seal.fill")
+                        .font(.system(size: 12, weight: .bold))
+                        .foregroundStyle(.yellow)
+                        .labelStyle(.titleAndIcon)
+                }
+            }
+
+            Text("@\(user.username)")
+                .font(.system(size: 15, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            if let description = user.description, !description.isEmpty {
+                Text(description)
+                    .font(.system(size: 14))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(3)
+                    .fixedSize(horizontal: false, vertical: true)
+            }
+
+            FlowLayout(spacing: 10) {
+                if let location = user.location, !location.isEmpty {
+                    ProfileMetaLabel(icon: "mappin.and.ellipse", text: location)
+                }
+                if let website = user.website, !website.isEmpty {
+                    ProfileMetaLabel(icon: "link", text: website)
+                }
+                if let joinedAt = formattedJoinedDate {
+                    ProfileMetaLabel(icon: "calendar", text: "加入于 \(joinedAt)")
+                }
+            }
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+        }
+    }
+
     private var displayName: String {
         if let name = user.name, !name.isEmpty {
             return name
@@ -151,8 +172,8 @@ private struct ProfileHeaderView: View {
             return nil
         }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
         return formatter.string(from: date)
     }
 }
@@ -160,7 +181,7 @@ private struct ProfileHeaderView: View {
 private struct ProfileAvatarView: View {
     let user: UserDTO
     let size: CGFloat
-    @State private var image: NSImage?
+    @State private var image: PlatformImage?
 
     var body: some View {
         ZStack {
@@ -168,7 +189,7 @@ private struct ProfileAvatarView: View {
                 .fill(.quaternary)
 
             if let image {
-                Image(nsImage: image)
+                Image(platformImage: image)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: size, height: size)
@@ -298,19 +319,19 @@ private struct CumulativeStatsPanel: View {
 
     private var secondaryMetrics: [LifetimeMetric] {
         [
-            LifetimeMetric(icon: "star.fill", title: "评分", value: "\(stats.ratings.total)", subtitle: "所有评分"),
-            LifetimeMetric(icon: "text.bubble.fill", title: "评论", value: "\(commentTotal)", subtitle: "评论与影评"),
-            LifetimeMetric(icon: "person.2.fill", title: "关注", value: "\(stats.network.following)", subtitle: "\(stats.network.followers) 位关注者")
+            LifetimeMetric(icon: "star.fill", title: L10n.string("评分"), value: "\(stats.ratings.total)", subtitle: L10n.string("所有评分")),
+            LifetimeMetric(icon: "text.bubble.fill", title: L10n.string("评论"), value: "\(commentTotal)", subtitle: L10n.string("评论与影评")),
+            LifetimeMetric(icon: "person.2.fill", title: L10n.string("关注"), value: "\(stats.network.following)", subtitle: L10n.string("%d 位关注者", stats.network.followers))
         ]
     }
 
     private func hoursText(_ minutes: Int) -> String {
-        guard minutes > 0 else { return "暂无" }
+        guard minutes > 0 else { return L10n.string("暂无") }
         let hours = Double(minutes) / 60
         if hours < 100 {
-            return String(format: "%.1f 小时", hours)
+            return L10n.string("%.1f 小时", hours)
         }
-        return "\(minutes / 60) 小时"
+        return L10n.string("%d 小时", minutes / 60)
     }
 }
 
@@ -406,14 +427,26 @@ private struct LifetimeInlineMetric: View {
 private struct MonthStatsSection: View {
     let currentMonthStats: MonthlyWatchStats?
     let previousMonthStats: MonthlyWatchStats?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 14) {
             SectionTitle(title: "月度统计", icon: "calendar")
 
-            HStack(alignment: .top, spacing: 12) {
-                MonthStatPanel(label: "本月", stats: currentMonthStats)
-                MonthStatPanel(label: "上月", stats: previousMonthStats)
+            if isCompact {
+                VStack(spacing: 12) {
+                    MonthStatPanel(label: "本月", stats: currentMonthStats)
+                    MonthStatPanel(label: "上月", stats: previousMonthStats)
+                }
+            } else {
+                HStack(alignment: .top, spacing: 12) {
+                    MonthStatPanel(label: "本月", stats: currentMonthStats)
+                    MonthStatPanel(label: "上月", stats: previousMonthStats)
+                }
             }
         }
     }

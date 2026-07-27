@@ -1,5 +1,6 @@
 import SwiftUI
 
+#if os(macOS)
 struct ContentView: View {
     @Environment(AppState.self) private var appState
     @State private var authService = AuthService.shared
@@ -28,7 +29,7 @@ struct ContentView: View {
                 }
                 .toolbarBackground(.hidden, for: .windowToolbar)
                 .onChange(of: appState.selectedSection) { _, _ in
-                    appState.navigationPath = NavigationPath()
+                    appState.navigationPath = []
                 }
             }
         } else {
@@ -67,6 +68,20 @@ struct ContentView: View {
     @ViewBuilder
     private func destinationView(for route: Route) -> some View {
         switch route {
+        case .movies:
+            MoviesView()
+        case .shows:
+            ShowsView()
+        case .browse:
+            BrowseView()
+        case .upNext:
+            UpNextView()
+        case .watchlist:
+            WatchlistView()
+        case .history:
+            HistoryView()
+        case .collection:
+            CollectionView()
         case .movieDetail(let id):
             MovieDetailView(movieId: id)
         case .showDetail(let id):
@@ -86,6 +101,7 @@ struct ContentView: View {
         }
     }
 }
+#endif
 
 private struct WindowSurfaceBackground: View {
     @Environment(\.colorScheme) private var colorScheme

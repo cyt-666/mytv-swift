@@ -4,15 +4,30 @@ struct MediaGridView: View {
     let items: [MediaItem]
     var onItemTap: ((MediaItem) -> Void)?
     var onItemAppear: ((MediaItem) -> Void)?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
-    private let columns = [
-        GridItem(.adaptive(minimum: 140, maximum: 180), spacing: 16)
-    ]
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var cardWidth: CGFloat {
+        isCompact ? 96 : 150
+    }
+
+    private var columns: [GridItem] {
+        [
+            GridItem(
+                .adaptive(minimum: isCompact ? 94 : 140, maximum: isCompact ? 108 : 180),
+                spacing: isCompact ? 12 : 16,
+                alignment: .top
+            )
+        ]
+    }
 
     var body: some View {
-        LazyVGrid(columns: columns, spacing: 20) {
+        LazyVGrid(columns: columns, spacing: isCompact ? 14 : 20) {
             ForEach(items) { item in
-                MediaCardView(item: item)
+                MediaCardView(item: item, posterWidth: cardWidth)
                     .onAppear {
                         onItemAppear?(item)
                     }

@@ -8,9 +8,9 @@ enum KeychainError: Error, LocalizedError {
     var errorDescription: String? {
         switch self {
         case .unexpectedData:
-            return "钥匙串返回了无效数据"
+            return L10n.string("钥匙串返回了无效数据")
         case .unhandledStatus(let status):
-            return "钥匙串操作失败: \(status)"
+            return L10n.string("钥匙串操作失败: %d", Int(status))
         }
     }
 }

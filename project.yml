@@ -3,15 +3,24 @@ options:
   bundleIdPrefix: com.mytv
   deploymentTarget:
     macOS: "15.0"
+    iOS: "18.0"
   xcodeVersion: "16.0"
   generateEmptyDirectories: true
+attributes:
+  LastUpgradeCheck: "2650"
 
 targets:
   MyTV:
     type: application
     platform: macOS
+    configFiles:
+      Debug: MyTV/Config/MyTV.xcconfig
+      Release: MyTV/Config/MyTV.xcconfig
     sources:
-      - MyTV
+      - path: MyTV
+        excludes:
+          - iOS
+          - Config/Local.xcconfig
     info:
       path: MyTV/Info.plist
       properties:
@@ -33,3 +42,58 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
+
+  MyTViOS:
+    type: application
+    platform: iOS
+    productName: MyTV
+    configFiles:
+      Debug: MyTV/Config/MyTV.xcconfig
+      Release: MyTV/Config/MyTV.xcconfig
+    supportedDestinations:
+      - iOS
+      - iOS Simulator
+    sources:
+      - path: MyTV
+        excludes:
+          - Info.plist
+          - MyTV.entitlements
+          - Config/Local.xcconfig
+    info:
+      path: MyTV/iOS/Info.plist
+      properties:
+        CFBundleShortVersionString: $(MARKETING_VERSION)
+        CFBundleVersion: $(CURRENT_PROJECT_VERSION)
+        TraktClientID: $(TRAKT_CLIENT_ID)
+        CFBundleURLTypes:
+          - CFBundleURLName: com.mytv.app.ios.oauth
+            CFBundleURLSchemes:
+              - mytv
+        BGTaskSchedulerPermittedIdentifiers:
+          - com.mytv.app.ios.moviepilot.refresh
+        UIBackgroundModes:
+          - fetch
+        UILaunchStoryboardName: LaunchScreen
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+        UISupportedInterfaceOrientations~ipad:
+          - UIInterfaceOrientationPortrait
+          - UIInterfaceOrientationPortraitUpsideDown
+          - UIInterfaceOrientationLandscapeLeft
+          - UIInterfaceOrientationLandscapeRight
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: com.mytv.app.ios
+        MARKETING_VERSION: "1.0.7"
+        CURRENT_PROJECT_VERSION: 1
+        SWIFT_VERSION: "6.0"
+        PRODUCT_NAME: MyTV
+        IPHONEOS_DEPLOYMENT_TARGET: "18.0"
+        SUPPORTED_DESTINATIONS: "iphoneos iphonesimulator"
+        TARGETED_DEVICE_FAMILY: "1,2"
+        CODE_SIGN_STYLE: Automatic
+        INFOPLIST_FILE: MyTV/iOS/Info.plist
+        ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon

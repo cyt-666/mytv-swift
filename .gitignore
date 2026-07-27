@@ -8,3 +8,4 @@ MyTV.xcodeproj/project.xcworkspace/xcuserdata/
 .env
 AGENTS.md
 .env.*
+MyTV/Config/Local.xcconfig

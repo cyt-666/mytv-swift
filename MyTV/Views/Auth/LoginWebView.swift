@@ -45,7 +45,7 @@ struct LoginWebView: View {
                         ProgressView()
                             .scaleEffect(0.8)
                     }
-                    Text(isLoggingIn ? "登录中..." : "使用 Trakt 账号登录")
+                    Text(isLoggingIn ? L10n.string("登录中...") : L10n.string("使用 Trakt 账号登录"))
                 }
                 .frame(minWidth: 200)
             }
@@ -56,6 +56,12 @@ struct LoginWebView: View {
         .padding(40)
         .frame(maxWidth: .infinity, maxHeight: .infinity)
         .background(.ultraThinMaterial)
+        .background {
+            WindowAccessor { window in
+                authService.updatePresentationAnchor(window)
+            }
+            .frame(width: 0, height: 0)
+        }
     }
 
     private func performLogin() async {

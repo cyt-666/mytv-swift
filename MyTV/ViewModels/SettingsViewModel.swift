@@ -21,13 +21,13 @@ final class SettingsViewModel {
 
     var moviePilotConnectionSummary: String {
         if availableMoviePilotTools.isEmpty {
-            return isMoviePilotConfigured ? "尚未测试连接" : "未配置"
+            return isMoviePilotConfigured ? L10n.string("尚未测试连接") : L10n.string("未配置")
         }
         let missing = MoviePilotConnectionResult.requiredTools.subtracting(availableMoviePilotTools).sorted()
         if missing.isEmpty {
-            return "连接正常"
+            return L10n.string("连接正常")
         }
-        return "连接成功，缺少工具：\(missing.joined(separator: ", "))"
+        return L10n.string("连接成功，缺少工具：%@", missing.joined(separator: ", "))
     }
 
     func loadMoviePilotSettings() {
@@ -49,7 +49,7 @@ final class SettingsViewModel {
             try MoviePilotSettingsStore.setAPIKey(moviePilotAPIKey)
             moviePilotHost = MoviePilotSettingsStore.host()
             moviePilotAPIKey = (try? MoviePilotSettingsStore.apiKey()) ?? ""
-            moviePilotMessage = "MoviePilot 设置已保存"
+            moviePilotMessage = L10n.string("MoviePilot 设置已保存")
             MoviePilotNotificationService.shared.restartIfNeeded()
         } catch {
             moviePilotErrorMessage = error.localizedDescription
@@ -66,14 +66,14 @@ final class SettingsViewModel {
         let host = moviePilotHost.trimmingCharacters(in: .whitespacesAndNewlines)
         let apiKey = moviePilotAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !host.isEmpty, !apiKey.isEmpty else {
-            moviePilotErrorMessage = "请填写 MoviePilot 地址和 API Key"
+            moviePilotErrorMessage = L10n.string("请填写 MoviePilot 地址和 API Key")
             return
         }
 
         do {
             let result = try await MoviePilotAPIClient.shared.validateConnection(host: host, apiKey: apiKey)
             availableMoviePilotTools = result.availableTools
-            moviePilotMessage = result.hasRequiredTools ? "MoviePilot 连接正常" : moviePilotConnectionSummary
+            moviePilotMessage = result.hasRequiredTools ? L10n.string("MoviePilot 连接正常") : moviePilotConnectionSummary
         } catch {
             availableMoviePilotTools = []
             moviePilotErrorMessage = (error as? LocalizedError)?.errorDescription ?? error.localizedDescription
@@ -85,7 +85,7 @@ final class SettingsViewModel {
             try MoviePilotSettingsStore.clearConnection()
             loadMoviePilotSettings()
             availableMoviePilotTools = []
-            moviePilotMessage = "MoviePilot 设置已清除"
+            moviePilotMessage = L10n.string("MoviePilot 设置已清除")
             moviePilotErrorMessage = nil
             MoviePilotNotificationService.shared.stop()
         } catch {
@@ -99,7 +99,7 @@ final class SettingsViewModel {
 
         if enabled {
             guard isMoviePilotConfigured else {
-                moviePilotErrorMessage = "请先保存 MoviePilot 连接设置"
+                moviePilotErrorMessage = L10n.string("请先保存 MoviePilot 连接设置")
                 moviePilotNotificationsEnabled = false
                 MoviePilotSettingsStore.setNotificationsEnabled(false)
                 return
@@ -107,7 +107,7 @@ final class SettingsViewModel {
 
             let granted = await MoviePilotNotificationService.shared.requestAuthorization()
             guard granted else {
-                moviePilotErrorMessage = "系统通知权限未开启"
+                moviePilotErrorMessage = L10n.string("系统通知权限未开启")
                 moviePilotNotificationsEnabled = false
                 MoviePilotSettingsStore.setNotificationsEnabled(false)
                 MoviePilotNotificationService.shared.restartIfNeeded()
@@ -118,7 +118,7 @@ final class SettingsViewModel {
         MoviePilotSettingsStore.setNotificationsEnabled(enabled)
         moviePilotNotificationsEnabled = enabled
         MoviePilotNotificationService.shared.restartIfNeeded()
-        moviePilotMessage = enabled ? "MoviePilot 通知已开启" : "MoviePilot 通知已关闭"
+        moviePilotMessage = enabled ? L10n.string("MoviePilot 通知已开启") : L10n.string("MoviePilot 通知已关闭")
     }
 
     func setMoviePilotNotificationCategory(_ category: MoviePilotNotificationCategory, enabled: Bool) {
@@ -129,6 +129,6 @@ final class SettingsViewModel {
         }
         MoviePilotSettingsStore.setNotificationCategories(moviePilotNotificationCategories)
         MoviePilotNotificationService.shared.restartIfNeeded()
-        moviePilotMessage = "通知类型已更新"
+        moviePilotMessage = L10n.string("通知类型已更新")
     }
 }

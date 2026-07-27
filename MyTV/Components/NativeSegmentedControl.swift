@@ -1,3 +1,4 @@
+#if os(macOS)
 import AppKit
 import SwiftUI
 
@@ -61,3 +62,22 @@ final class NativeSegmentedControlCoordinator: NSObject {
         onSelectionChanged(sender.selectedSegment)
     }
 }
+#else
+import SwiftUI
+
+struct NativeSegmentedControl<Value: Hashable>: View {
+    @Binding var selection: Value
+    let items: [Value]
+    let title: (Value) -> String
+
+    var body: some View {
+        Picker("", selection: $selection) {
+            ForEach(items, id: \.self) { item in
+                Text(title(item)).tag(item)
+            }
+        }
+        .pickerStyle(.segmented)
+        .labelsHidden()
+    }
+}
+#endif

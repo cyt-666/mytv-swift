@@ -17,9 +17,9 @@ enum MoviePilotCenterTab: String, CaseIterable, Identifiable {
 
     var segmentTitle: String {
         switch self {
-        case .downloads: return "下载"
-        case .subscriptions: return "订阅"
-        case .messages: return "消息"
+        case .downloads: return L10n.string("下载")
+        case .subscriptions: return L10n.string("订阅")
+        case .messages: return L10n.string("消息")
         }
     }
 }
@@ -59,6 +59,7 @@ final class MoviePilotCenterViewModel {
     var actionMessage: String?
     var errorMessage: String?
 
+    private var feedbackGeneration = 0
     private var subscriptionResolutionGeneration = 0
     private var messageResolutionGeneration = 0
     private var messageResolutionCache: [String: MoviePilotMessageResolution] = [:]
@@ -79,7 +80,7 @@ final class MoviePilotCenterViewModel {
             hasLoadedSubscriptions = false
             hasLoadedDownloads = false
             hasLoadedMessages = false
-            errorMessage = "请先在设置中配置 MoviePilot"
+            errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
 
@@ -92,7 +93,7 @@ final class MoviePilotCenterViewModel {
     func loadDownloads() async {
         guard isConfigured else {
             downloads = []
-            errorMessage = "请先在设置中配置 MoviePilot"
+            errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
         guard !isLoadingDownloads else { return }
@@ -102,7 +103,7 @@ final class MoviePilotCenterViewModel {
         defer { isLoadingDownloads = false }
 
         do {
-            downloads = try await MoviePilotAPIClient.shared.fetchDownloadTasks(status: "all")
+            downloads = try await MoviePilotAPIClient.shared.fetchDownloadTasks(status: "downloading")
             hasLoadedDownloads = true
         } catch {
             if !hasLoadedDownloads {
@@ -115,7 +116,7 @@ final class MoviePilotCenterViewModel {
     func loadSubscriptions() async {
         guard isConfigured else {
             subscriptions = []
-            errorMessage = "请先在设置中配置 MoviePilot"
+            errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
         guard !isLoadingSubscriptions else { return }
@@ -145,7 +146,7 @@ final class MoviePilotCenterViewModel {
     func loadMessages() async {
         guard isConfigured else {
             messages = []
-            errorMessage = "请先在设置中配置 MoviePilot"
+            errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
         guard !isLoadingMessages else { return }
@@ -184,13 +185,13 @@ final class MoviePilotCenterViewModel {
 
     func deleteSubscription(_ subscription: MoviePilotSubscription) async {
         await performAction(refresh: loadSubscriptions) {
-            try await MoviePilotAPIClient.shared.deleteSubscription(id: subscription.id)
+            try await MoviePilotAPIClient.shared.deleteSubscription(subscription)
         }
     }
 
     func setDownload(_ download: MoviePilotDownloadTask, paused: Bool) async {
         guard let hash = download.hash, !hash.isEmpty else {
-            errorMessage = "这个下载任务缺少 hash，无法操作"
+            errorMessage = L10n.string("这个下载任务缺少 hash，无法操作")
             return
         }
 
@@ -203,17 +204,16 @@ final class MoviePilotCenterViewModel {
         }
     }
 
-    func deleteDownload(_ download: MoviePilotDownloadTask, deleteFiles: Bool) async {
+    func deleteDownload(_ download: MoviePilotDownloadTask) async {
         guard let hash = download.hash, !hash.isEmpty else {
-            errorMessage = "这个下载任务缺少 hash，无法删除"
+            errorMessage = L10n.string("这个下载任务缺少 hash，无法删除")
             return
         }
 
         await performAction(refresh: loadDownloads) {
             try await MoviePilotAPIClient.shared.deleteDownload(
                 hash: hash,
-                downloader: download.downloader,
-                deleteFiles: deleteFiles
+                downloader: download.downloader
             )
         }
     }
@@ -253,21 +253,40 @@ final class MoviePilotCenterViewModel {
 
     private func performAction(refresh: () async -> Void, action: () async throws -> String) async {
         guard isConfigured else {
-            errorMessage = "请先在设置中配置 MoviePilot"
+            errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
         guard !isPerformingAction else { return }
 
         isPerformingAction = true
-        actionMessage = nil
-        errorMessage = nil
+        clearFeedback()
         defer { isPerformingAction = false }
 
         do {
-            actionMessage = try await action()
+            showActionMessage(try await action())
             await refresh()
         } catch {
             errorMessage = message(for: error)
+        }
+    }
+
+    private func clearFeedback() {
+        feedbackGeneration += 1
+        actionMessage = nil
+        errorMessage = nil
+    }
+
+    private func showActionMessage(_ message: String) {
+        feedbackGeneration += 1
+        let generation = feedbackGeneration
+        actionMessage = message
+
+        Task { [weak self] in
+            try? await Task.sleep(nanoseconds: 4_000_000_000)
+            await MainActor.run {
+                guard let self, self.feedbackGeneration == generation else { return }
+                self.actionMessage = nil
+            }
         }
     }
 

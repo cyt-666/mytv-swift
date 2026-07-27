@@ -11,21 +11,34 @@ enum MoviePilotError: Error, LocalizedError, Sendable {
     var errorDescription: String? {
         switch self {
         case .missingConfiguration:
-            return "请先配置 MoviePilot 地址和 API Key"
+            return L10n.string("请先配置 MoviePilot 地址和 API Key")
         case .invalidHost(let host):
-            return "MoviePilot 地址无效: \(host)"
+            return L10n.string("MoviePilot 地址无效: %@", host)
         case .invalidResponse:
-            return "MoviePilot 返回了无效响应"
+            return L10n.string("MoviePilot 返回了无效响应")
         case .httpError(let statusCode, let message):
             if let message, !message.isEmpty {
-                return "MoviePilot 返回错误 \(statusCode): \(message)"
+                return L10n.string("MoviePilot 返回错误 %d: %@", statusCode, message)
             }
-            return "MoviePilot 返回错误 \(statusCode)"
+            return L10n.string("MoviePilot 返回错误 %d", statusCode)
         case .decodingError(let message):
-            return "解析 MoviePilot 数据失败: \(message)"
+            return L10n.string("解析 MoviePilot 数据失败: %@", message)
         case .toolFailed(let message):
             return message
         }
+    }
+}
+
+private struct MoviePilotSubscribeRequest: Encodable {
+    let name: String
+    let year: String
+    let type: String
+    let tmdbId: Int?
+    let season: Int?
+
+    enum CodingKeys: String, CodingKey {
+        case name, year, type, season
+        case tmdbId = "tmdbid"
     }
 }
 
@@ -57,18 +70,22 @@ actor MoviePilotAPIClient {
     }
 
     func addSubscribe(target: MoviePilotMediaTarget, season: Int? = nil) async throws -> String {
-        var arguments: [String: MoviePilotJSONValue] = [
-            "title": .string(target.title),
-            "year": .string(target.yearString),
-            "media_type": .string(target.kind.rawValue)
-        ]
-        if let tmdbId = target.tmdbId {
-            arguments["tmdb_id"] = .int(tmdbId)
+        let requestBody = MoviePilotSubscribeRequest(
+            name: target.title,
+            year: target.yearString,
+            type: target.kind.displayName,
+            tmdbId: target.tmdbId,
+            season: target.kind == .tv ? season : nil
+        )
+        let response: MoviePilotRESTResponse = try await request(
+            method: "POST",
+            path: "/subscribe/",
+            body: encoder.encode(requestBody)
+        )
+        guard response.success else {
+            throw MoviePilotError.toolFailed(response.message ?? L10n.string("添加订阅失败"))
         }
-        if let season {
-            arguments["season"] = .int(season)
-        }
-        return try await callTool("add_subscribe", arguments: arguments)
+        return response.message ?? L10n.string("已添加订阅")
     }
 
     func fetchSubscriptions(
@@ -77,25 +94,33 @@ actor MoviePilotAPIClient {
         tmdbId: Int? = nil,
         page: Int? = nil
     ) async throws -> [MoviePilotSubscription] {
-        if let page {
-            return try await fetchSubscriptionsPage(status: status, mediaType: mediaType, tmdbId: tmdbId, page: page)
+        let subscriptions: [MoviePilotSubscription] = try await request(
+            method: "GET",
+            path: "/subscribe/"
+        )
+        let requestedKind = Self.mediaKind(for: mediaType)
+        let filteredSubscriptions = subscriptions.filter { subscription in
+            if status != "all", subscription.state != status {
+                return false
+            }
+            if mediaType != "all", subscription.mediaKind != requestedKind {
+                return false
+            }
+            if let tmdbId, subscription.tmdbId != tmdbId {
+                return false
+            }
+            return true
         }
 
-        var allSubscriptions: [MoviePilotSubscription] = []
-        var currentPage = 1
-        while currentPage <= 10 {
-            let pageItems = try await fetchSubscriptionsPage(
-                status: status,
-                mediaType: mediaType,
-                tmdbId: tmdbId,
-                page: currentPage
-            )
-            allSubscriptions.append(contentsOf: pageItems)
-
-            guard pageItems.count >= 100 else { break }
-            currentPage += 1
+        guard let page else {
+            return filteredSubscriptions
         }
-        return allSubscriptions
+        let pageSize = 100
+        let startIndex = max(0, page - 1) * pageSize
+        guard startIndex < filteredSubscriptions.count else {
+            return []
+        }
+        return Array(filteredSubscriptions[startIndex..<min(startIndex + pageSize, filteredSubscriptions.count)])
     }
 
     func fetchDownloadTasks(
@@ -105,6 +130,18 @@ actor MoviePilotAPIClient {
         title: String? = nil,
         tag: String? = nil
     ) async throws -> [MoviePilotDownloadTask] {
+        if status == "downloading", hash == nil, title == nil, tag == nil {
+            var queryItems: [URLQueryItem] = []
+            if let downloader, !downloader.isEmpty {
+                queryItems.append(URLQueryItem(name: "name", value: downloader))
+            }
+            return try await request(
+                method: "GET",
+                path: "/download/",
+                queryItems: queryItems
+            )
+        }
+
         var arguments: [String: MoviePilotJSONValue] = [
             "status": .string(status)
         ]
@@ -126,49 +163,94 @@ actor MoviePilotAPIClient {
     }
 
     func updateSubscription(id: Int, state: String) async throws -> String {
-        try await callTool(
-            "update_subscribe",
-            arguments: [
-                "subscribe_id": .int(id),
-                "state": .string(state)
+        let response: MoviePilotRESTResponse = try await request(
+            method: "PUT",
+            path: "/subscribe/status/\(id)",
+            queryItems: [
+                URLQueryItem(name: "state", value: state)
             ]
         )
+        guard response.success else {
+            throw MoviePilotError.toolFailed(response.message ?? L10n.string("更新订阅状态失败"))
+        }
+        return state == "S" ? L10n.string("已暂停订阅") : L10n.string("已恢复订阅")
     }
 
-    func deleteSubscription(id: Int) async throws -> String {
-        try await callTool(
-            "delete_subscribe",
-            arguments: [
-                "subscribe_id": .int(id)
-            ]
+    func deleteSubscription(_ subscription: MoviePilotSubscription) async throws -> String {
+        guard let mediaIdentifier = subscription.restMediaIdentifier else {
+            return try await callTool(
+                "delete_subscribe",
+                arguments: [
+                    "subscribe_id": .int(subscription.id)
+                ]
+            )
+        }
+
+        var queryItems: [URLQueryItem] = []
+        if let season = subscription.season {
+            queryItems.append(URLQueryItem(name: "season", value: String(season)))
+        }
+        let response: MoviePilotRESTResponse = try await request(
+            method: "DELETE",
+            path: "/subscribe/media/\(mediaIdentifier)",
+            queryItems: queryItems
         )
+        guard response.success else {
+            throw MoviePilotError.toolFailed(response.message ?? L10n.string("删除订阅失败"))
+        }
+        return response.message ?? L10n.string("已删除订阅")
     }
 
     func modifyDownload(hash: String, downloader: String? = nil, action: String) async throws -> String {
-        var arguments: [String: MoviePilotJSONValue] = [
-            "hash": .string(hash),
-            "action": .string(action)
-        ]
-        if let downloader, !downloader.isEmpty {
-            arguments["downloader"] = .string(downloader)
-        }
-        return try await callTool("modify_download", arguments: arguments)
+        let normalizedAction = action == "start" ? "start" : "stop"
+        _ = try await downloadAction(
+            method: "GET",
+            path: "/download/\(normalizedAction)/\(hash)",
+            downloader: downloader
+        )
+        return normalizedAction == "start" ? L10n.string("已恢复下载任务") : L10n.string("已暂停下载任务")
     }
 
-    func deleteDownload(hash: String, downloader: String? = nil, deleteFiles: Bool = false) async throws -> String {
-        var arguments: [String: MoviePilotJSONValue] = [
-            "hash": .string(hash),
-            "delete_files": .bool(deleteFiles)
-        ]
+    func deleteDownload(hash: String, downloader: String? = nil) async throws -> String {
+        _ = try await downloadAction(
+            method: "DELETE",
+            path: "/download/\(hash)",
+            downloader: downloader
+        )
+        return L10n.string("已删除下载任务")
+    }
+
+    private func downloadAction(method: String, path: String, downloader: String?) async throws -> MoviePilotRESTResponse {
+        var queryItems: [URLQueryItem] = []
         if let downloader, !downloader.isEmpty {
-            arguments["downloader"] = .string(downloader)
+            queryItems.append(URLQueryItem(name: "name", value: downloader))
         }
-        return try await callTool("delete_download", arguments: arguments)
+
+        let response: MoviePilotRESTResponse = try await request(
+            method: method,
+            path: path,
+            queryItems: queryItems
+        )
+        guard response.success else {
+            throw MoviePilotError.toolFailed(response.message ?? L10n.string("MoviePilot 操作失败"))
+        }
+        return response
+    }
+
+    private static func mediaKind(for mediaType: String) -> MoviePilotMediaKind? {
+        switch mediaType.trimmingCharacters(in: .whitespacesAndNewlines).lowercased() {
+        case "movie", "电影":
+            return .movie
+        case "tv", "show", "电视剧":
+            return .tv
+        default:
+            return nil
+        }
     }
 
     func fetchStatus(for target: MoviePilotMediaTarget) async throws -> MoviePilotMediaStatus {
         guard target.tmdbId != nil else {
-            throw MoviePilotError.toolFailed("这个条目缺少 TMDB ID，无法匹配 MoviePilot 状态")
+            throw MoviePilotError.toolFailed(L10n.string("这个条目缺少 TMDB ID，无法匹配 MoviePilot 状态"))
         }
 
         async let subscriptions = querySubscribes(for: target)
@@ -228,25 +310,6 @@ actor MoviePilotAPIClient {
         }
     }
 
-    private func fetchSubscriptionsPage(
-        status: String,
-        mediaType: String,
-        tmdbId: Int?,
-        page: Int
-    ) async throws -> [MoviePilotSubscription] {
-        var arguments: [String: MoviePilotJSONValue] = [
-            "status": .string(status),
-            "media_type": .string(mediaType),
-            "page": .int(page)
-        ]
-        if let tmdbId {
-            arguments["tmdb_id"] = .int(tmdbId)
-        }
-
-        let text = try await callTool("query_subscribes", arguments: arguments)
-        return try decodeArray(MoviePilotSubscription.self, fromToolText: text)
-    }
-
     private func callTool(_ toolName: String, arguments: [String: MoviePilotJSONValue]) async throws -> String {
         let body = MoviePilotToolCallRequest(toolName: toolName, arguments: arguments)
         let response: MoviePilotToolCallResponse = try await request(
@@ -255,7 +318,7 @@ actor MoviePilotAPIClient {
             body: encoder.encode(body)
         )
         guard response.success else {
-            throw MoviePilotError.toolFailed(response.error ?? "调用 MoviePilot 工具失败")
+            throw MoviePilotError.toolFailed(response.error ?? L10n.string("调用 MoviePilot 工具失败"))
         }
         return response.result ?? ""
     }

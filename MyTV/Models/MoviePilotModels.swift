@@ -6,8 +6,8 @@ enum MoviePilotMediaKind: String, Codable, Sendable {
 
     var displayName: String {
         switch self {
-        case .movie: return "电影"
-        case .tv: return "电视剧"
+        case .movie: return L10n.string("电影")
+        case .tv: return L10n.string("电视剧")
         }
     }
 }
@@ -27,15 +27,15 @@ enum MoviePilotSubscriptionKind: String, CaseIterable, Identifiable, Sendable {
 
     var emptyTitle: String {
         switch self {
-        case .movie: return "暂无电影订阅"
-        case .tv: return "暂无电视剧订阅"
+        case .movie: return L10n.string("暂无电影订阅")
+        case .tv: return L10n.string("暂无电视剧订阅")
         }
     }
 
     var segmentTitle: String {
         switch self {
-        case .movie: return "电影"
-        case .tv: return "剧集"
+        case .movie: return L10n.string("电影")
+        case .tv: return L10n.string("剧集")
         }
     }
 }
@@ -62,14 +62,8 @@ struct MoviePilotConnectionResult: Equatable, Sendable {
     let availableTools: Set<String>
 
     static let requiredTools: Set<String> = [
-        "add_subscribe",
-        "query_subscribes",
         "query_library_exists",
-        "query_download_tasks",
-        "update_subscribe",
-        "delete_subscribe",
-        "modify_download",
-        "delete_download"
+        "query_download_tasks"
     ]
 
     var hasRequiredTools: Bool {
@@ -91,6 +85,11 @@ struct MoviePilotToolCallResponse: Decodable, Sendable {
     let success: Bool
     let result: String?
     let error: String?
+}
+
+struct MoviePilotRESTResponse: Decodable, Sendable {
+    let success: Bool
+    let message: String?
 }
 
 enum MoviePilotJSONValue: Encodable, Sendable {
@@ -122,6 +121,10 @@ struct MoviePilotSubscription: Decodable, Identifiable, Sendable {
     let name: String?
     let year: String?
     let type: String?
+    let tmdbId: Int?
+    let doubanId: String?
+    let bangumiId: Int?
+    let mediaId: String?
     let season: Int?
     let totalEpisode: Int?
     let startEpisode: Int?
@@ -163,24 +166,43 @@ struct MoviePilotSubscription: Decodable, Identifiable, Sendable {
             parts.append(type)
         }
         if let lackEpisode {
-            parts.append("缺失 \(lackEpisode)")
+            parts.append(L10n.string("缺失 %d", lackEpisode))
         }
-        return parts.isEmpty ? "MoviePilot 订阅" : parts.joined(separator: " · ")
+        return parts.isEmpty ? L10n.string("MoviePilot 订阅") : parts.joined(separator: " · ")
     }
 
     var stateLabel: String {
         switch state {
-        case "R": return "订阅中"
-        case "S": return "已暂停"
-        case "P": return "待定"
-        case "N": return "新建"
+        case "R": return L10n.string("订阅中")
+        case "S": return L10n.string("已暂停")
+        case "P": return L10n.string("待定")
+        case "N": return L10n.string("新建")
         case let value? where !value.isEmpty: return value
-        default: return "未知"
+        default: return L10n.string("未知")
         }
+    }
+
+    var restMediaIdentifier: String? {
+        if let tmdbId {
+            return "tmdb:\(tmdbId)"
+        }
+        if let doubanId = doubanId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !doubanId.isEmpty {
+            return "douban:\(doubanId)"
+        }
+        if let mediaId = mediaId?.trimmingCharacters(in: .whitespacesAndNewlines),
+           !mediaId.isEmpty {
+            return mediaId
+        }
+        return nil
     }
 
     enum CodingKeys: String, CodingKey {
         case id, name, year, type, season, state
+        case tmdbId = "tmdbid"
+        case doubanId = "doubanid"
+        case bangumiId = "bangumiid"
+        case mediaId = "mediaid"
         case totalEpisode = "total_episode"
         case startEpisode = "start_episode"
         case lackEpisode = "lack_episode"
@@ -241,7 +263,7 @@ struct MoviePilotDownloadTask: Decodable, Identifiable, Sendable {
     var displayTitle: String {
         let candidates = [title, media?.title, name]
             .compactMap { $0?.trimmingCharacters(in: .whitespacesAndNewlines) }
-        return candidates.first { !$0.isEmpty } ?? "下载任务"
+        return candidates.first { !$0.isEmpty } ?? L10n.string("下载任务")
     }
 
     var displaySubtitle: String {
@@ -255,18 +277,18 @@ struct MoviePilotDownloadTask: Decodable, Identifiable, Sendable {
         if let downloader, !downloader.isEmpty {
             parts.append(downloader)
         }
-        return parts.isEmpty ? "MoviePilot 下载" : parts.joined(separator: " · ")
+        return parts.isEmpty ? L10n.string("MoviePilot 下载") : parts.joined(separator: " · ")
     }
 
     var stateLabel: String {
-        guard let state, !state.isEmpty else { return "未知" }
+        guard let state, !state.isEmpty else { return L10n.string("未知") }
         switch state.lowercased() {
-        case "downloading": return "下载中"
-        case "paused": return "已暂停"
-        case "seeding": return "做种中"
-        case "completed": return "已完成"
-        case "stalleddl": return "等待下载"
-        case "stalledup": return "等待做种"
+        case "downloading": return L10n.string("下载中")
+        case "paused": return L10n.string("已暂停")
+        case "seeding": return L10n.string("做种中")
+        case "completed": return L10n.string("已完成")
+        case "stalleddl": return L10n.string("等待下载")
+        case "stalledup": return L10n.string("等待做种")
         default: return state
         }
     }
@@ -294,6 +316,37 @@ struct MoviePilotDownloadTask: Decodable, Identifiable, Sendable {
         case seasonEpisode = "season_episode"
         case leftTime = "left_time"
     }
+
+    init(from decoder: Decoder) throws {
+        let container = try decoder.container(keyedBy: CodingKeys.self)
+        downloader = try container.decodeIfPresent(String.self, forKey: .downloader)
+        hash = try container.decodeIfPresent(String.self, forKey: .hash)
+        title = try container.decodeIfPresent(String.self, forKey: .title)
+        name = try container.decodeIfPresent(String.self, forKey: .name)
+        year = try container.decodeIfPresent(String.self, forKey: .year)
+        seasonEpisode = try container.decodeIfPresent(String.self, forKey: .seasonEpisode)
+        size = try container.decodeIfPresent(Double.self, forKey: .size)
+        progress = try Self.decodeStringOrNumber(from: container, forKey: .progress)
+        state = try container.decodeIfPresent(String.self, forKey: .state)
+        upspeed = try container.decodeIfPresent(String.self, forKey: .upspeed)
+        dlspeed = try container.decodeIfPresent(String.self, forKey: .dlspeed)
+        tags = try container.decodeIfPresent(String.self, forKey: .tags)
+        leftTime = try container.decodeIfPresent(String.self, forKey: .leftTime)
+        media = try container.decodeIfPresent(MoviePilotDownloadMedia.self, forKey: .media)
+    }
+
+    private static func decodeStringOrNumber(
+        from container: KeyedDecodingContainer<CodingKeys>,
+        forKey key: CodingKeys
+    ) throws -> String? {
+        if let stringValue = try? container.decodeIfPresent(String.self, forKey: key) {
+            return stringValue
+        }
+        if let doubleValue = try? container.decodeIfPresent(Double.self, forKey: key) {
+            return String(format: "%.1f%%", doubleValue)
+        }
+        return nil
+    }
 }
 
 struct MoviePilotDownloadMedia: Decodable, Sendable {
@@ -302,6 +355,7 @@ struct MoviePilotDownloadMedia: Decodable, Sendable {
     let title: String?
     let season: String?
     let episode: String?
+    let image: String?
 }
 
 struct MoviePilotMediaStatus: Equatable, Sendable {
@@ -408,10 +462,10 @@ enum MoviePilotNotificationCategory: String, Codable, CaseIterable, Identifiable
 
     var displayName: String {
         switch self {
-        case .organize: return "入库"
-        case .download: return "下载"
-        case .subscribe: return "订阅"
-        case .exception: return "异常"
+        case .organize: return L10n.string("入库")
+        case .download: return L10n.string("下载")
+        case .subscribe: return L10n.string("订阅")
+        case .exception: return L10n.string("异常")
         }
     }
 
@@ -426,10 +480,10 @@ enum MoviePilotNotificationCategory: String, Codable, CaseIterable, Identifiable
 
     var settingsDescription: String {
         switch self {
-        case .organize: return "整理入库完成或相关入库消息"
-        case .download: return "添加、删除或完成下载任务"
-        case .subscribe: return "订阅添加、调整、删除或完成"
-        case .exception: return "失败、错误、异常或手动处理消息"
+        case .organize: return L10n.string("整理入库完成或相关入库消息")
+        case .download: return L10n.string("添加、删除或完成下载任务")
+        case .subscribe: return L10n.string("订阅添加、调整、删除或完成")
+        case .exception: return L10n.string("失败、错误、异常或手动处理消息")
         }
     }
 

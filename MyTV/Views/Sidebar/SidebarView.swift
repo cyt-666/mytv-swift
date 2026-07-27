@@ -5,13 +5,28 @@ struct SidebarView: View {
     @Environment(\.colorScheme) private var colorScheme
     @State private var authService = AuthService.shared
 
+    private var discoverySections: [SidebarSection] {
+        SidebarSection.allCases.filter(\.isDiscovery)
+    }
+
+    private var personalSections: [SidebarSection] {
+        SidebarSection.allCases.filter { section in
+            !section.isDiscovery && (section != .moviePilot || appState.isMediaAssistantConfigured)
+        }
+    }
+
     var body: some View {
         @Bindable var state = appState
 
         VStack(spacing: 0) {
+            #if os(macOS)
             // Traffic lights spacer
             Spacer()
                 .frame(height: 52)
+            #else
+            Spacer()
+                .frame(height: 12)
+            #endif
 
             // Search field
             SidebarSearchField(query: $state.searchQuery) {
@@ -25,14 +40,14 @@ struct SidebarView: View {
             // Navigation groups
             List(selection: $state.selectedSection) {
                 Section("发现") {
-                    ForEach(SidebarSection.allCases.filter(\.isDiscovery)) { section in
+                    ForEach(discoverySections) { section in
                         SidebarNavItem(section: section)
                             .tag(section)
                     }
                 }
 
                 Section("我的") {
-                    ForEach(SidebarSection.allCases.filter { !$0.isDiscovery }) { section in
+                    ForEach(personalSections) { section in
                         SidebarNavItem(section: section)
                             .tag(section)
                     }

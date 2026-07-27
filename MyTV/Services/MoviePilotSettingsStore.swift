@@ -20,10 +20,19 @@ enum MoviePilotSettingsStore {
         return value
     }
 
+    static func configuredHost() -> String? {
+        guard let data = CacheService.getConfig(key: hostKey),
+              let value = String(data: data, encoding: .utf8) else {
+            return nil
+        }
+
+        let trimmed = value.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed.isEmpty ? nil : trimmed
+    }
+
     static func setHost(_ host: String) {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        let value = trimmed.isEmpty ? defaultHost : trimmed
-        CacheService.setConfig(key: hostKey, value: Data(value.utf8))
+        CacheService.setConfig(key: hostKey, value: Data(trimmed.utf8))
     }
 
     static func apiKey() throws -> String? {
@@ -40,7 +49,7 @@ enum MoviePilotSettingsStore {
     }
 
     static func clearConnection() throws {
-        CacheService.setConfig(key: hostKey, value: Data(defaultHost.utf8))
+        CacheService.setConfig(key: hostKey, value: Data())
         CacheService.setConfig(key: notificationsEnabledKey, value: Data("false".utf8))
         setNotificationCategories(MoviePilotNotificationCategory.defaultEnabled)
         CacheService.setConfig(key: lastMessageIdKey, value: Data("0".utf8))
@@ -100,11 +109,26 @@ enum MoviePilotSettingsStore {
         CacheService.setConfig(key: lastMessageIdKey, value: Data(String(id).utf8))
     }
 
+    static func hasConnectionConfiguration() -> Bool {
+        guard configuredHost() != nil,
+              let apiKey = try? apiKey()?.trimmingCharacters(in: .whitespacesAndNewlines),
+              !apiKey.isEmpty else {
+            return false
+        }
+        return true
+    }
+
     static func currentConfiguration() throws -> (host: String, apiKey: String)? {
-        guard let apiKey = try apiKey(),
-              !apiKey.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else {
+        guard let host = configuredHost(),
+              let storedAPIKey = try apiKey() else {
             return nil
         }
-        return (host(), apiKey)
+
+        let apiKey = storedAPIKey.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard !apiKey.isEmpty else {
+            return nil
+        }
+
+        return (host, apiKey)
     }
 }

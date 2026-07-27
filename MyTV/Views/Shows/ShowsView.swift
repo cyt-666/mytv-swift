@@ -2,10 +2,20 @@ import SwiftUI
 
 struct ShowsView: View {
     @State private var viewModel = ShowsViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
+                if isCompact {
+                    categoryPicker
+                        .padding(.horizontal, 16)
+                }
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -27,7 +37,7 @@ struct ShowsView: View {
                             Task { await viewModel.loadMoreIfNeeded(currentItem: show) }
                         }
                     )
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, isCompact ? 16 : 20)
 
                     PaginationFooterView(
                         isLoadingMore: viewModel.isLoadingMore,
@@ -47,15 +57,10 @@ struct ShowsView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("剧集分类", selection: $viewModel.selectedTab) {
-                    Text("热门").tag(ShowsViewModel.Tab.trending)
-                    Text("流行").tag(ShowsViewModel.Tab.popular)
-                    Text("即将播出").tag(ShowsViewModel.Tab.anticipated)
+                if !isCompact {
+                    categoryPicker
+                        .frame(width: 270)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.regular)
-                .labelsHidden()
-                .frame(width: 270)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -69,5 +74,16 @@ struct ShowsView: View {
                 .help("刷新")
             }
         }
+    }
+
+    private var categoryPicker: some View {
+        Picker("剧集分类", selection: $viewModel.selectedTab) {
+            Text("热门").tag(ShowsViewModel.Tab.trending)
+            Text("流行").tag(ShowsViewModel.Tab.popular)
+            Text("即将播出").tag(ShowsViewModel.Tab.anticipated)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
     }
 }

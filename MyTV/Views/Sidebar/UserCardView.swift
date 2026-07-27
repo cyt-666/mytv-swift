@@ -3,13 +3,13 @@ import SwiftUI
 struct UserCardView: View {
     @Environment(AppState.self) private var appState
     @State private var authService = AuthService.shared
-    @State private var avatarImage: NSImage?
+    @State private var avatarImage: PlatformImage?
 
     var body: some View {
         HStack(spacing: 10) {
             // Avatar
             if let avatarImage {
-                Image(nsImage: avatarImage)
+                Image(platformImage: avatarImage)
                     .resizable()
                     .aspectRatio(contentMode: .fill)
                     .frame(width: 32, height: 32)

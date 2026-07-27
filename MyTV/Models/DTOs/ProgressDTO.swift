@@ -24,6 +24,14 @@ struct UpNextItemDTO: Codable, Identifiable {
 
     var id: String { "\(show.ids.trakt)_\(nextEpisode.season)_\(nextEpisode.number)" }
 
+    var posterURL: String? {
+        show.images?.bestPosterURL ?? nextEpisode.images?.bestPosterURL
+    }
+
+    var hasDisplayImage: Bool {
+        posterURL != nil
+    }
+
     var displayCompletedEpisodes: Int {
         var corrected = progress.displayCompleted
 

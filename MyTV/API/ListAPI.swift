@@ -82,19 +82,19 @@ enum MediaListTarget: Hashable {
 
     var watchlistLabel: String {
         switch self {
-        case .movie: return "将电影加入观看清单"
-        case .show: return "将剧集加入观看清单"
-        case .season: return "将本季加入观看清单"
-        case .episode: return "将本集加入观看清单"
+        case .movie: return L10n.string("将电影加入观看清单")
+        case .show: return L10n.string("将剧集加入观看清单")
+        case .season: return L10n.string("将本季加入观看清单")
+        case .episode: return L10n.string("将本集加入观看清单")
         }
     }
 
     var successName: String {
         switch self {
-        case .movie: return "电影"
-        case .show: return "剧集"
-        case .season: return "季度"
-        case .episode: return "单集"
+        case .movie: return L10n.string("电影")
+        case .show: return L10n.string("剧集")
+        case .season: return L10n.string("季度")
+        case .episode: return L10n.string("单集")
         }
     }
 

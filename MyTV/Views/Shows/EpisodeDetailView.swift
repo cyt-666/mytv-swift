@@ -7,6 +7,20 @@ struct EpisodeDetailView: View {
     @State private var viewModel: EpisodeDetailViewModel?
     @State private var listActionViewModel = MediaListActionViewModel()
     @Environment(AppState.self) private var appState
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var heroHeight: CGFloat {
+        isCompact ? 330 : (AdaptiveLayout.runsOnIOS ? 340 : 400)
+    }
+
+    private var heroTopPadding: CGFloat {
+        isCompact ? 106 : (AdaptiveLayout.runsOnIOS ? 82 : 120)
+    }
 
     var body: some View {
         Group {
@@ -15,14 +29,14 @@ struct EpisodeDetailView: View {
                     VStack(spacing: 0) {
                         episodeHero(episode: episode, viewModel: viewModel)
 
-                        HStack(alignment: .top, spacing: 22) {
+                        AdaptiveDetailColumns {
                             VStack(alignment: .leading, spacing: 18) {
                                 if let overview = viewModel.translation?.overview ?? episode.overview,
                                    !overview.isEmpty {
                                     DetailSectionCard(title: "简介") {
                                         Text(overview)
-                                            .font(.system(size: 15))
-                                            .lineSpacing(5)
+                                            .font(.system(size: isCompact ? 14 : 15))
+                                            .lineSpacing(isCompact ? 4 : 5)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
@@ -63,8 +77,8 @@ struct EpisodeDetailView: View {
 
                                 commentsSection(viewModel: viewModel)
                             }
-
-                            VStack(spacing: 12) {
+                        } sidebar: {
+                            DetailStatGrid {
                                 if let rating = episode.rating {
                                     DetailStatTile(
                                         title: "Trakt 评分",
@@ -85,15 +99,13 @@ struct EpisodeDetailView: View {
                                     DetailStatTile(title: "投票", value: "\(votes)", icon: "person.2.fill")
                                 }
                             }
-                            .frame(width: 220)
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
-                        .padding(.bottom, 40)
                     }
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
                 .background(DetailBackgroundClearer())
-                .ignoresSafeArea(.container, edges: .top)
+                .detailTopSafeAreaBleed(isCompact)
+                .detailNavigationBarBackgroundHidden(isCompact)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -107,6 +119,10 @@ struct EpisodeDetailView: View {
             self.viewModel = vm
             await vm.load()
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let viewModel else { return }
+            Task { await viewModel.refreshWatchedStatus() }
+        }
     }
 
     private func episodeHero(episode: EpisodeDTO, viewModel: EpisodeDetailViewModel) -> some View {
@@ -119,79 +135,148 @@ struct EpisodeDetailView: View {
         let previewURL = episode.images?.screenshot?.first
             ?? episode.images?.fanart?.first
             ?? viewModel.show?.images?.poster?.first
+        let firstAiredDate = DetailWatchedDateFormatter.parse(episode.firstAired)
 
         return ZStack(alignment: .bottomLeading) {
-            DetailHeroArtworkView(urlString: backdropURL, height: 400, dimming: 0.20)
+            DetailHeroArtworkView(urlString: backdropURL, height: heroHeight, dimming: 0.20)
 
-            HStack(alignment: .bottom, spacing: 24) {
-                AsyncPosterImage(urlString: previewURL, contentMode: .fit)
-                    .frame(width: 220, height: 124)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .overlay {
-                        RoundedRectangle(cornerRadius: 8, style: .continuous)
-                            .stroke(.white.opacity(0.16), lineWidth: 1)
+            Group {
+                if isCompact {
+                    episodeHeroText(
+                        episode: episode,
+                        title: title,
+                        showTitle: showTitle,
+                        firstAiredDate: firstAiredDate,
+                        viewModel: viewModel,
+                        titleSize: 23
+                    )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .bottom, spacing: 24) {
+                        previewImage(urlString: previewURL, width: 220)
+                        episodeHeroText(
+                            episode: episode,
+                            title: title,
+                            showTitle: showTitle,
+                            firstAiredDate: firstAiredDate,
+                            viewModel: viewModel,
+                            titleSize: 40
+                        )
+                            .frame(maxWidth: 760, alignment: .leading)
                     }
-                    .shadow(color: .black.opacity(0.38), radius: 18, y: 10)
+                }
+            }
+            .padding(.horizontal, isCompact ? 16 : 32)
+            .padding(.bottom, isCompact ? 18 : 28)
+            .padding(.top, heroTopPadding)
+        }
+    }
 
-                VStack(alignment: .leading, spacing: 12) {
-                    if let showTitle {
-                        Text(showTitle)
-                            .font(.system(size: 15, weight: .bold))
-                            .foregroundStyle(.white.opacity(0.74))
-                            .lineLimit(1)
-                    }
+    private func previewImage(urlString: String?, width: CGFloat) -> some View {
+        AsyncPosterImage(urlString: urlString, contentMode: .fit)
+            .frame(width: width, height: width * 0.56)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .overlay {
+                RoundedRectangle(cornerRadius: 8, style: .continuous)
+                    .stroke(.white.opacity(0.16), lineWidth: 1)
+            }
+            .shadow(color: .black.opacity(0.38), radius: isCompact ? 10 : 18, y: isCompact ? 6 : 10)
+    }
 
-                    Text(title)
-                        .font(.system(size: 40, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+    private func episodeHeroText(
+        episode: EpisodeDTO,
+        title: String,
+        showTitle: String?,
+        firstAiredDate: Date?,
+        viewModel: EpisodeDetailViewModel,
+        titleSize: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: isCompact ? 8 : 12) {
+            if let showTitle {
+                Text(showTitle)
+                    .font(.system(size: isCompact ? 13 : 15, weight: .bold))
+                    .foregroundStyle(.white.opacity(0.74))
+                    .lineLimit(1)
+            }
 
-                    HStack(spacing: 8) {
-                        DetailMetaChip(text: "S\(episode.season)E\(episode.number)", icon: "play.rectangle.fill", tint: .white.opacity(0.86))
+            Text(title)
+                .font(.system(size: titleSize, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(isCompact ? 3 : 2)
+                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: false, vertical: true)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
 
-                        if let firstAired = episode.firstAired {
-                            DetailMetaChip(text: String(firstAired.prefix(10)), icon: "calendar", tint: .white.opacity(0.86))
-                        }
+            FlowLayout(spacing: isCompact ? 6 : 8) {
+                DetailMetaChip(text: "S\(episode.season)E\(episode.number)", icon: "play.rectangle.fill", tint: .white.opacity(0.86))
 
-                        if let runtime = episode.runtime {
-                            DetailMetaChip(text: "\(runtime) 分钟", icon: "clock", tint: .white.opacity(0.86))
-                        }
+                if let firstAired = episode.firstAired {
+                    DetailMetaChip(text: String(firstAired.prefix(10)), icon: "calendar", tint: .white.opacity(0.86))
+                }
 
-                        if let rating = episode.rating {
-                            DetailMetaChip(
-                                text: String(format: "%.1f", rating),
-                                icon: "star.fill",
-                                tint: .yellow
-                            )
-                        }
-                    }
+                if let runtime = episode.runtime {
+                    DetailMetaChip(text: "\(runtime) 分钟", icon: "clock", tint: .white.opacity(0.86))
+                }
 
-                    MediaListActionMenu(
-                        target: .episode(episode.ids.trakt),
-                        viewModel: listActionViewModel
+                if let rating = episode.rating {
+                    DetailMetaChip(
+                        text: String(format: "%.1f", rating),
+                        icon: "star.fill",
+                        tint: .yellow
                     )
                 }
-                .frame(maxWidth: 760, alignment: .leading)
             }
-            .padding(.horizontal, 32)
-            .padding(.bottom, 28)
-            .padding(.top, 120)
+
+            DetailHeroActionGroup {
+                episodeHeroActions(
+                    episode: episode,
+                    title: title,
+                    firstAiredDate: firstAiredDate,
+                    viewModel: viewModel
+                )
+            }
         }
+    }
+
+    @ViewBuilder
+    private func episodeHeroActions(
+        episode: EpisodeDTO,
+        title: String,
+        firstAiredDate: Date?,
+        viewModel: EpisodeDetailViewModel
+    ) -> some View {
+        MediaListActionMenu(
+            target: .episode(episode.ids.trakt),
+            viewModel: listActionViewModel
+        )
+
+        DetailMarkWatchedButton(
+            title: title,
+            releaseDate: firstAiredDate,
+            releaseDateLabel: L10n.string("首播日期"),
+            isSubmitting: viewModel.isMarkingWatched,
+            isCheckingStatus: viewModel.isLoadingWatchedStatus,
+            isWatched: viewModel.isWatched,
+            message: viewModel.watchedMessage,
+            errorMessage: viewModel.watchedErrorMessage,
+            onMark: { date in
+                await viewModel.markWatched(at: date)
+            }
+        )
     }
 
     private func showLink(show: ShowDetailsDTO, translation: TranslationResult?) -> some View {
         Button {
             appState.navigate(to: .showDetail(id: showId))
         } label: {
-            HStack(spacing: 14) {
+            HStack(spacing: isCompact ? 10 : 14) {
                 AsyncPosterImage(urlString: show.images?.poster?.first ?? show.images?.fanart?.first)
-                    .frame(width: 66, height: 98)
+                    .frame(width: isCompact ? 48 : 66, height: isCompact ? 72 : 98)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 7) {
+                VStack(alignment: .leading, spacing: isCompact ? 5 : 7) {
                     Text(translation?.title ?? show.title)
-                        .font(.system(size: 16, weight: .bold))
+                        .font(.system(size: isCompact ? 14 : 16, weight: .bold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
@@ -206,15 +291,15 @@ struct EpisodeDetailView: View {
                             Text(status)
                         }
                     }
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: isCompact ? 11 : 12, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
 
                     if let overview = translation?.overview ?? show.overview {
                         Text(overview)
-                            .font(.system(size: 12))
+                            .font(.system(size: isCompact ? 11 : 12))
                             .foregroundStyle(.tertiary)
-                            .lineLimit(2)
+                            .lineLimit(isCompact ? 1 : 2)
                     }
                 }
 
@@ -224,7 +309,7 @@ struct EpisodeDetailView: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            .padding(12)
+            .padding(isCompact ? 10 : 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background(.quaternary.opacity(0.28))
             .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))

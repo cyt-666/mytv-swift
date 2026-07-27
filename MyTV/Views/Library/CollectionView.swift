@@ -2,10 +2,20 @@ import SwiftUI
 
 struct CollectionView: View {
     @State private var viewModel = CollectionViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                if isCompact {
+                    typePicker
+                        .padding(.horizontal, 16)
+                }
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -14,8 +24,14 @@ struct CollectionView: View {
                     ContentUnavailableView("暂无片库", systemImage: "folder", description: Text("收藏的电影和剧集会显示在这里"))
                         .padding(.top, 36)
                 } else {
-                    MediaGridView(items: viewModel.items) { _ in }
-                        .padding(.horizontal, 20)
+                    MediaGridView(
+                        items: viewModel.items,
+                        onItemTap: { _ in },
+                        onItemAppear: { item in
+                            Task { await viewModel.hydratePosterIfNeeded(for: item) }
+                        }
+                    )
+                        .padding(.horizontal, isCompact ? 16 : 20)
                 }
             }
             .padding(.top, 24)
@@ -24,14 +40,10 @@ struct CollectionView: View {
         .onChange(of: viewModel.mediaType) { _, _ in Task { await viewModel.load() } }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("片库类型", selection: $viewModel.mediaType) {
-                    Text("电影").tag("movies")
-                    Text("剧集").tag("shows")
+                if !isCompact {
+                    typePicker
+                        .frame(width: 140)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.regular)
-                .labelsHidden()
-                .frame(width: 140)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -45,5 +57,15 @@ struct CollectionView: View {
                 .help("刷新")
             }
         }
+    }
+
+    private var typePicker: some View {
+        Picker("片库类型", selection: $viewModel.mediaType) {
+            Text("电影").tag("movies")
+            Text("剧集").tag("shows")
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
     }
 }

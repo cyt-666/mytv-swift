@@ -20,14 +20,14 @@ final class CalendarViewModel {
     var rangeTitle: String {
         guard let firstDate = groupedShows.first?.date,
               let lastDate = groupedShows.last?.date else {
-            return "未来 \(daysToLoad) 天"
+            return L10n.string("未来 %d 天", daysToLoad)
         }
-        return "\(Self.monthDayFormatter.string(from: firstDate)) - \(Self.monthDayFormatter.string(from: lastDate))"
+        return "\(Self.monthDayFormatter().string(from: firstDate)) - \(Self.monthDayFormatter().string(from: lastDate))"
     }
 
     func load() async {
         guard AuthService.shared.isLoggedIn else {
-            errorMessage = "请先登录"
+            errorMessage = L10n.string("请先登录")
             return
         }
         isLoading = true
@@ -41,7 +41,7 @@ final class CalendarViewModel {
             groupedShows = makeGroups(from: shows)
         } catch {
             print("加载日历失败: \(error)")
-            errorMessage = "加载失败: \(error.localizedDescription)"
+            errorMessage = L10n.string("加载失败: %@", error.localizedDescription)
         }
     }
 
@@ -60,8 +60,8 @@ final class CalendarViewModel {
             return CalendarGroup(
                 id: key,
                 date: date,
-                monthDay: date.map { Self.monthDayFormatter.string(from: $0) } ?? "未知日期",
-                weekday: date.map { Self.weekdayFormatter.string(from: $0) } ?? "",
+                monthDay: date.map { Self.monthDayFormatter().string(from: $0) } ?? L10n.string("未知日期"),
+                weekday: date.map { Self.weekdayFormatter().string(from: $0) } ?? "",
                 relativeTitle: relativeTitle(for: date),
                 shows: sortedShows
             )
@@ -89,11 +89,11 @@ final class CalendarViewModel {
     }
 
     private func relativeTitle(for date: Date?) -> String {
-        guard let date else { return "待定" }
+        guard let date else { return L10n.string("待定") }
         let calendar = Calendar.current
-        if calendar.isDateInToday(date) { return "今天" }
-        if calendar.isDateInTomorrow(date) { return "明天" }
-        return Self.weekdayFormatter.string(from: date)
+        if calendar.isDateInToday(date) { return L10n.string("今天") }
+        if calendar.isDateInTomorrow(date) { return L10n.string("明天") }
+        return Self.weekdayFormatter().string(from: date)
     }
 
     static func parseTraktDate(_ value: String) -> Date? {
@@ -102,24 +102,24 @@ final class CalendarViewModel {
 
     private static let apiDateFormatter: DateFormatter = {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = Locale(identifier: "en_US_POSIX")
         formatter.dateFormat = "yyyy-MM-dd"
         return formatter
     }()
 
-    private static let monthDayFormatter: DateFormatter = {
+    private static func monthDayFormatter() -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter
-    }()
+    }
 
-    private static let weekdayFormatter: DateFormatter = {
+    private static func weekdayFormatter() -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "EEEE"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("EEEE")
         return formatter
-    }()
+    }
 
     private static let traktDateParserWithFractionalSeconds: ISO8601DateFormatter = {
         let formatter = ISO8601DateFormatter()

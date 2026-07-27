@@ -3,6 +3,11 @@ import SwiftUI
 struct CalendarView: View {
     @State private var viewModel = CalendarViewModel()
     @Environment(AppState.self) private var appState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
@@ -39,8 +44,8 @@ struct CalendarView: View {
                     }
                 }
             }
-            .padding(.horizontal, 24)
-            .padding(.top, 56)
+            .padding(.horizontal, isCompact ? 16 : 24)
+            .padding(.top, isCompact ? 18 : 56)
             .padding(.bottom, 36)
             .frame(maxWidth: 1180)
             .frame(maxWidth: .infinity)
@@ -66,32 +71,29 @@ private struct CalendarHeroView: View {
     let totalCount: Int
     let todayCount: Int
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(alignment: .center, spacing: 26) {
-            VStack(alignment: .leading, spacing: 8) {
-                Text(rangeTitle)
-                    .font(.system(size: 14, weight: .semibold))
-                    .foregroundStyle(.secondary)
-
-                Text("剧集日历")
-                    .font(.system(size: 36, weight: .bold))
-                    .foregroundStyle(.primary)
-
-                Text("追踪观看清单中即将播出的单集")
-                    .font(.system(size: 14, weight: .medium))
-                    .foregroundStyle(.secondary)
-            }
-
-            Spacer()
-
-            HStack(spacing: 12) {
-                CalendarSummaryMetric(title: "未来日程", value: "\(totalCount)", unit: "集")
-                CalendarSummaryMetric(title: "今日更新", value: "\(todayCount)", unit: "集")
+        Group {
+            if isCompact {
+                VStack(alignment: .leading, spacing: 18) {
+                    titleBlock
+                    metrics
+                }
+            } else {
+                HStack(alignment: .center, spacing: 26) {
+                    titleBlock
+                    Spacer()
+                    metrics
+                }
             }
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, minHeight: 172, alignment: .leading)
+        .padding(isCompact ? 20 : 28)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 164 : 172, alignment: .leading)
         .background {
             ZStack {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)
@@ -109,6 +111,29 @@ private struct CalendarHeroView: View {
         .overlay {
             RoundedRectangle(cornerRadius: 8, style: .continuous)
                 .stroke(.primary.opacity(colorScheme == .dark ? 0.11 : 0.08), lineWidth: 1)
+        }
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 8) {
+            Text(rangeTitle)
+                .font(.system(size: 14, weight: .semibold))
+                .foregroundStyle(.secondary)
+
+            Text("剧集日历")
+                .font(.system(size: isCompact ? 30 : 36, weight: .bold))
+                .foregroundStyle(.primary)
+
+            Text("追踪观看清单中即将播出的单集")
+                .font(.system(size: 14, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var metrics: some View {
+        HStack(spacing: 12) {
+            CalendarSummaryMetric(title: "未来日程", value: "\(totalCount)", unit: "集")
+            CalendarSummaryMetric(title: "今日更新", value: "\(todayCount)", unit: "集")
         }
     }
 }
@@ -214,8 +239,41 @@ private struct CalendarEpisodeCard: View {
     @State private var episodeTranslation: TranslationResult?
     @State private var isHovered = false
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
+        Group {
+            if isCompact {
+                compactContent
+            } else {
+                regularContent
+            }
+        }
+        .padding(isCompact ? 12 : 16)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? nil : 138, alignment: .leading)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(
+                    isHovered ? Color.orange.opacity(0.36) : Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.07),
+                    lineWidth: 1
+                )
+        }
+        .shadow(color: .black.opacity(isHovered ? 0.10 : 0.04), radius: isHovered ? 14 : 8, y: isHovered ? 8 : 4)
+        .scaleEffect(isHovered ? 1.012 : 1)
+        .animation(.easeInOut(duration: 0.15), value: isHovered)
+        .onHover { isHovered = $0 }
+        .task {
+            await loadTranslations()
+        }
+    }
+
+    private var regularContent: some View {
         HStack(alignment: .top, spacing: 14) {
             AsyncPosterImage(urlString: show.show.images?.poster?.first)
                 .frame(width: 72, height: 108)
@@ -281,23 +339,40 @@ private struct CalendarEpisodeCard: View {
             }
             .frame(width: 150, alignment: .trailing)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 138, alignment: .leading)
-        .background(.thinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(
-                    isHovered ? Color.orange.opacity(0.36) : Color.primary.opacity(colorScheme == .dark ? 0.10 : 0.07),
-                    lineWidth: 1
-                )
-        }
-        .shadow(color: .black.opacity(isHovered ? 0.10 : 0.04), radius: isHovered ? 14 : 8, y: isHovered ? 8 : 4)
-        .scaleEffect(isHovered ? 1.012 : 1)
-        .animation(.easeInOut(duration: 0.15), value: isHovered)
-        .onHover { isHovered = $0 }
-        .task {
-            await loadTranslations()
+    }
+
+    private var compactContent: some View {
+        HStack(alignment: .top, spacing: 12) {
+            AsyncPosterImage(urlString: show.show.images?.poster?.first)
+                .frame(width: 56, height: 84)
+                .clipShape(RoundedRectangle(cornerRadius: 7, style: .continuous))
+
+            VStack(alignment: .leading, spacing: 8) {
+                Text(showTranslation?.title ?? show.show.title)
+                    .font(.system(size: 15, weight: .bold))
+                    .foregroundStyle(.primary)
+                    .lineLimit(2)
+
+                Text(episodeLine)
+                    .font(.system(size: 13, weight: .medium))
+                    .foregroundStyle(.secondary)
+                    .lineLimit(2)
+
+                HStack(spacing: 10) {
+                    Label(episodeCode, systemImage: "play.rectangle.fill")
+                    Label(firstAiredTimeText, systemImage: "clock")
+                }
+                .font(.system(size: 12, weight: .semibold))
+                .foregroundStyle(.secondary)
+                .lineLimit(1)
+            }
+
+            Spacer(minLength: 0)
+
+            Image(systemName: "chevron.right")
+                .font(.system(size: 12, weight: .bold))
+                .foregroundStyle(.tertiary)
+                .padding(.top, 4)
         }
     }
 
@@ -318,10 +393,10 @@ private struct CalendarEpisodeCard: View {
     private var firstAiredTimeText: String {
         guard let firstAired = show.firstAired,
               let date = CalendarViewModel.parseTraktDate(firstAired) else {
-            return "时间待定"
+            return L10n.string("时间待定")
         }
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
+        formatter.locale = L10n.locale
         formatter.dateFormat = "HH:mm"
         return formatter.string(from: date)
     }

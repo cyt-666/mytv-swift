@@ -1,4 +1,6 @@
 import SwiftUI
+
+#if os(macOS)
 import AppKit
 
 /// Walks up the NSView hierarchy from the SwiftUI hosting view
@@ -67,3 +69,10 @@ struct DetailBackgroundClearer: NSViewRepresentable {
         }
     }
 }
+#else
+struct DetailBackgroundClearer: View {
+    var body: some View {
+        Color.clear
+    }
+}
+#endif
