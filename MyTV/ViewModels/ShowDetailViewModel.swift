@@ -13,6 +13,7 @@ final class ShowDetailViewModel {
     var isMarkingWatched = false
     var isLoadingWatchedStatus = false
     var isWatched = false
+    var watchedAt: Date?
     var watchedMessage: String?
     var watchedErrorMessage: String?
 
@@ -51,6 +52,7 @@ final class ShowDetailViewModel {
     func refreshWatchedStatus() async {
         guard isLoggedIn else {
             isWatched = false
+            watchedAt = nil
             return
         }
 
@@ -58,7 +60,9 @@ final class ShowDetailViewModel {
         defer { isLoadingWatchedStatus = false }
 
         do {
-            isWatched = try await UserAPI.hasWatchedShow(id: showId)
+            let status = try await UserAPI.watchedShowStatus(id: showId)
+            isWatched = status.isWatched
+            watchedAt = DetailWatchedDateFormatter.parse(status.watchedAt)
         } catch {
             print("同步剧集已看状态失败: \(error)")
         }
@@ -120,6 +124,7 @@ final class ShowDetailViewModel {
             _ = try await SyncAPI.addToHistory(shows: [show.ids.trakt], watchedAt: date)
             CacheService.invalidateWatchedData()
             isWatched = true
+            watchedAt = date
             watchedMessage = L10n.string("%@已标记为已看", translation?.title ?? show.title)
             return true
         } catch {

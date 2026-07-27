@@ -257,6 +257,7 @@ struct EpisodeDetailView: View {
             isSubmitting: viewModel.isMarkingWatched,
             isCheckingStatus: viewModel.isLoadingWatchedStatus,
             isWatched: viewModel.isWatched,
+            watchedAt: viewModel.watchedAt,
             message: viewModel.watchedMessage,
             errorMessage: viewModel.watchedErrorMessage,
             onMark: { date in

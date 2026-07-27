@@ -11,6 +11,7 @@ final class MovieDetailViewModel {
     var isMarkingWatched = false
     var isLoadingWatchedStatus = false
     var isWatched = false
+    var watchedAt: Date?
     var watchedMessage: String?
     var watchedErrorMessage: String?
 
@@ -41,6 +42,7 @@ final class MovieDetailViewModel {
     func refreshWatchedStatus() async {
         guard isLoggedIn else {
             isWatched = false
+            watchedAt = nil
             return
         }
 
@@ -48,7 +50,9 @@ final class MovieDetailViewModel {
         defer { isLoadingWatchedStatus = false }
 
         do {
-            isWatched = try await UserAPI.hasWatched(type: "movies", id: movieId)
+            let status = try await UserAPI.watchedStatus(type: "movies", id: movieId)
+            isWatched = status.isWatched
+            watchedAt = DetailWatchedDateFormatter.parse(status.watchedAt)
         } catch {
             print("同步电影已看状态失败: \(error)")
         }
@@ -106,6 +110,7 @@ final class MovieDetailViewModel {
             _ = try await SyncAPI.addToHistory(movies: [movie.ids.trakt], watchedAt: date)
             CacheService.invalidateWatchedData()
             isWatched = true
+            watchedAt = date
             watchedMessage = L10n.string("%@已标记为已看", translation?.title ?? movie.title)
             return true
         } catch {

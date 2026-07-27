@@ -116,22 +116,29 @@ import Foundation
         return result
     }
 
-    static func hasWatched(type: String, id: Int) async throws -> Bool {
+    static func watchedStatus(type: String, id: Int) async throws -> WatchedStatus {
         let result: [HistoryItemDTO] = try await TraktAPIClient.shared.request(
             uri: "/users/me/history/\(type)/\(id)",
             params: TraktEndpoint.makePagination(page: 1, limit: 1),
             requiresAuth: true
         )
-        return !result.isEmpty
+        return WatchedStatus(
+            isWatched: !result.isEmpty,
+            watchedAt: result.first?.watchedAt
+        )
     }
 
-    static func hasWatchedShow(id: Int) async throws -> Bool {
+    static func watchedShowStatus(id: Int) async throws -> WatchedStatus {
         let progress: ShowProgressDTO = try await TraktAPIClient.shared.request(
             uri: "/shows/\(id)/progress/watched",
             params: ["extended": "full"],
             requiresAuth: true
         )
-        return progress.aired > 0 && (progress.completed >= progress.aired || progress.nextEpisode == nil)
+        let isWatched = progress.aired > 0 && (progress.completed >= progress.aired || progress.nextEpisode == nil)
+        return WatchedStatus(
+            isWatched: isWatched,
+            watchedAt: isWatched ? progress.lastWatchedAt : nil
+        )
     }
 
     static func comments(
@@ -178,6 +185,11 @@ import Foundation
         CacheService.setAPIResponse(key: cacheKey, data: result, ttl: AppConstants.CacheTTL.short)
         return result
     }
+}
+
+struct WatchedStatus {
+    let isWatched: Bool
+    let watchedAt: String?
 }
 
 struct TraktListDTO: Codable, Identifiable, Hashable {

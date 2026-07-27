@@ -15,6 +15,7 @@ final class EpisodeDetailViewModel {
     var isMarkingWatched = false
     var isLoadingWatchedStatus = false
     var isWatched = false
+    var watchedAt: Date?
     var watchedMessage: String?
     var watchedErrorMessage: String?
 
@@ -65,6 +66,7 @@ final class EpisodeDetailViewModel {
     func refreshWatchedStatus() async {
         guard isLoggedIn else {
             isWatched = false
+            watchedAt = nil
             return
         }
         guard let episodeId = episode?.ids.trakt else { return }
@@ -73,7 +75,9 @@ final class EpisodeDetailViewModel {
         defer { isLoadingWatchedStatus = false }
 
         do {
-            isWatched = try await UserAPI.hasWatched(type: "episodes", id: episodeId)
+            let status = try await UserAPI.watchedStatus(type: "episodes", id: episodeId)
+            isWatched = status.isWatched
+            watchedAt = DetailWatchedDateFormatter.parse(status.watchedAt)
         } catch {
             print("同步单集已看状态失败: \(error)")
         }
@@ -135,6 +139,7 @@ final class EpisodeDetailViewModel {
             )
             CacheService.invalidateWatchedData()
             isWatched = true
+            watchedAt = date
             watchedMessage = L10n.string("%@已标记为已看", messageTitle)
             return true
         } catch {
