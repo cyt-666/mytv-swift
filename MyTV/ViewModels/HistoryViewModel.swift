@@ -48,8 +48,9 @@ final class HistoryViewModel {
         }
 
         let displayFormatter = DateFormatter()
-        displayFormatter.dateFormat = "yyyy-MM-dd HH:mm"
-        displayFormatter.locale = Locale(identifier: "zh_CN")
+        displayFormatter.locale = L10n.locale
+        displayFormatter.dateStyle = .medium
+        displayFormatter.timeStyle = .short
         return displayFormatter.string(from: date)
     }
 }

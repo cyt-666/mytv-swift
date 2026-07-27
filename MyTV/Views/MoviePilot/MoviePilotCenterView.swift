@@ -7,6 +7,11 @@ struct MoviePilotCenterView: View {
     @State private var selectedSubscriptionKind = MoviePilotSubscriptionKind.movie
     @State private var subscriptionToDelete: MoviePilotSubscription?
     @State private var downloadToDelete: MoviePilotDownloadTask?
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
@@ -15,7 +20,7 @@ struct MoviePilotCenterView: View {
 
                 if !viewModel.isConfigured {
                     ContentUnavailableView {
-                        Label("未配置 MoviePilot", systemImage: "link.badge.plus")
+                        Label("未配置媒体助手", systemImage: "link.badge.plus")
                     } actions: {
                         Button("打开设置") {
                             appState.navigate(to: .settings)
@@ -28,12 +33,18 @@ struct MoviePilotCenterView: View {
                     selectedContent
                 }
             }
-            .padding(.horizontal, 20)
-            .padding(.top, 72)
+            .padding(.horizontal, isCompact ? 16 : 20)
+            .padding(.top, isCompact ? 18 : 72)
             .padding(.bottom, 28)
         }
         .task {
             await viewModel.loadAll()
+        }
+        .task(id: selectedTab) {
+            await refreshDownloadsWhileVisible()
+        }
+        .refreshable {
+            await viewModel.refresh(tab: selectedTab)
         }
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
@@ -61,15 +72,9 @@ struct MoviePilotCenterView: View {
             Text(subscriptionToDelete?.displayTitle ?? "确认删除这个 MoviePilot 订阅？")
         }
         .confirmationDialog("删除下载任务", isPresented: downloadDeleteDialog, titleVisibility: .visible) {
-            Button("删除任务", role: .destructive) {
+            Button("删除下载任务", role: .destructive) {
                 if let download = downloadToDelete {
-                    Task { await viewModel.deleteDownload(download, deleteFiles: false) }
-                }
-                downloadToDelete = nil
-            }
-            Button("删除任务并删除文件", role: .destructive) {
-                if let download = downloadToDelete {
-                    Task { await viewModel.deleteDownload(download, deleteFiles: true) }
+                    Task { await viewModel.deleteDownload(download) }
                 }
                 downloadToDelete = nil
             }
@@ -77,29 +82,47 @@ struct MoviePilotCenterView: View {
                 downloadToDelete = nil
             }
         } message: {
-            Text("默认只从下载器删除任务，不删除已下载文件。")
+            Text(downloadToDelete?.displayTitle ?? "确认删除这个下载任务？")
         }
     }
 
     private var header: some View {
-        HStack(alignment: .center, spacing: 16) {
-            VStack(alignment: .leading, spacing: 4) {
-                Text("MoviePilot")
-                    .font(.system(size: 34, weight: .bold))
-                Text("订阅、下载任务和消息")
-                    .font(.system(size: 13, weight: .medium))
-                    .foregroundStyle(.secondary)
+        Group {
+            if isCompact {
+                VStack(alignment: .leading, spacing: 14) {
+                    Text("订阅、下载任务和消息")
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                    tabControl
+                }
+            } else {
+                HStack(alignment: .center, spacing: 16) {
+                    titleBlock
+                    Spacer()
+                    tabControl
+                }
             }
-
-            Spacer()
-
-            NativeSegmentedControl(
-                selection: $selectedTab,
-                items: MoviePilotCenterTab.allCases,
-                title: { $0.segmentTitle }
-            )
-            .frame(width: 300, height: 44)
         }
+    }
+
+    private var titleBlock: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            Text("媒体助手")
+                .font(.system(size: isCompact ? 30 : 34, weight: .bold))
+            Text("订阅、下载任务和消息")
+                .font(.system(size: 13, weight: .medium))
+                .foregroundStyle(.secondary)
+        }
+    }
+
+    private var tabControl: some View {
+        NativeSegmentedControl(
+            selection: $selectedTab,
+            items: MoviePilotCenterTab.allCases,
+            title: { $0.segmentTitle }
+        )
+        .frame(maxWidth: isCompact ? .infinity : 300)
+        .frame(height: 44)
     }
 
     @ViewBuilder
@@ -133,7 +156,34 @@ struct MoviePilotCenterView: View {
     }
 
     private var downloadsContent: some View {
-        VStack(spacing: 10) {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack {
+                Text("下载任务")
+                    .font(.system(size: 16, weight: .bold))
+
+                if viewModel.hasLoadedDownloads {
+                    Text("\(viewModel.downloads.count)")
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(.secondary)
+                        .padding(.horizontal, 7)
+                        .padding(.vertical, 3)
+                        .background(.quaternary.opacity(0.55))
+                        .clipShape(Capsule())
+                }
+
+                Spacer()
+
+                Button {
+                    Task { await viewModel.loadDownloads() }
+                } label: {
+                    Image(systemName: "arrow.clockwise")
+                        .symbolEffect(.rotate, isActive: viewModel.isLoadingDownloads)
+                }
+                .buttonStyle(.borderless)
+                .disabled(viewModel.isLoadingDownloads || viewModel.isPerformingAction)
+                .help("刷新下载任务")
+            }
+
             if (viewModel.isLoadingDownloads || viewModel.errorMessage == nil) &&
                 !viewModel.hasLoadedDownloads &&
                 viewModel.downloads.isEmpty {
@@ -163,6 +213,17 @@ struct MoviePilotCenterView: View {
         }
     }
 
+    private func refreshDownloadsWhileVisible() async {
+        guard selectedTab == .downloads else { return }
+
+        while !Task.isCancelled {
+            try? await Task.sleep(nanoseconds: 10_000_000_000)
+            guard !Task.isCancelled else { return }
+            guard selectedTab == .downloads, viewModel.isConfigured else { continue }
+            await viewModel.loadDownloads()
+        }
+    }
+
     private var subscriptionsContent: some View {
         VStack(alignment: .leading, spacing: 12) {
             NativeSegmentedControl(
@@ -170,7 +231,8 @@ struct MoviePilotCenterView: View {
                 items: MoviePilotSubscriptionKind.allCases,
                 title: { "\($0.segmentTitle) \(subscriptionCount(for: $0))" }
             )
-            .frame(width: 240, height: 44)
+            .frame(maxWidth: isCompact ? .infinity : 240)
+            .frame(height: 44)
 
             if (viewModel.isLoadingSubscriptions || viewModel.errorMessage == nil) &&
                 !viewModel.hasLoadedSubscriptions &&
@@ -269,20 +331,38 @@ private struct MoviePilotDownloadTaskRow: View {
     let isPerformingAction: Bool
     let onToggle: () -> Void
     let onDelete: () -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
-            Image(systemName: download.isPaused ? "pause.circle.fill" : "arrow.down.circle.fill")
-                .font(.system(size: 18, weight: .semibold))
-                .foregroundStyle(download.isPaused ? Color.orange : Color.blue)
-                .frame(width: 34, height: 34)
-                .background((download.isPaused ? Color.orange : Color.blue).opacity(0.12))
-                .clipShape(Circle())
+        Group {
+            if isCompact {
+                compactBody
+            } else {
+                regularBody
+            }
+        }
+        .padding(isCompact ? 12 : 14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private var regularBody: some View {
+        HStack(alignment: .top, spacing: 14) {
+            statusIcon(size: 34, iconSize: 18)
 
             VStack(alignment: .leading, spacing: 5) {
                 Text(download.displayTitle)
                     .font(.system(size: 14, weight: .semibold))
-                    .lineLimit(1)
+                    .lineLimit(2)
 
                 HStack(spacing: 8) {
                     Text(download.displaySubtitle)
@@ -304,39 +384,105 @@ private struct MoviePilotDownloadTaskRow: View {
                 }
             }
 
-            Spacer()
+            Spacer(minLength: 0)
 
-            HStack(spacing: 6) {
-                if download.canModify {
-                    Button {
-                        onToggle()
-                    } label: {
-                        Image(systemName: download.isPaused ? "play.fill" : "pause.fill")
-                    }
-                    .help(download.isPaused ? "恢复下载" : "暂停下载")
+            actionButtons
+        }
+    }
+
+    private var compactBody: some View {
+        VStack(alignment: .leading, spacing: 10) {
+            HStack(alignment: .top, spacing: 10) {
+                statusIcon(size: 30, iconSize: 16)
+
+                VStack(alignment: .leading, spacing: 4) {
+                    Text(download.displayTitle)
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+                        .lineLimit(2)
+                        .fixedSize(horizontal: false, vertical: true)
+
+                    Text(download.stateLabel)
+                        .font(.system(size: 11, weight: .bold))
+                        .foregroundStyle(download.isPaused ? Color.orange : Color.blue)
+                        .lineLimit(1)
                 }
 
-                if download.canDelete {
-                    Button(role: .destructive) {
-                        onDelete()
-                    } label: {
-                        Image(systemName: "trash")
-                    }
-                    .help("删除下载任务")
-                }
+                Spacer(minLength: 8)
+
+                actionButtons
             }
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .disabled(isPerformingAction)
+
+            downloadInfoFlow
+
+            if let progressValue {
+                ProgressView(value: progressValue)
+                    .tint(download.isPaused ? .orange : .blue)
+            }
         }
-        .padding(14)
-        .frame(maxWidth: .infinity, alignment: .leading)
-        .background(.ultraThinMaterial)
-        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-        .overlay {
-            RoundedRectangle(cornerRadius: 8, style: .continuous)
-                .stroke(.primary.opacity(0.06), lineWidth: 1)
+    }
+
+    private func statusIcon(size: CGFloat, iconSize: CGFloat) -> some View {
+        Image(systemName: download.isPaused ? "pause.circle.fill" : "arrow.down.circle.fill")
+            .font(.system(size: iconSize, weight: .semibold))
+            .foregroundStyle(download.isPaused ? Color.orange : Color.blue)
+            .frame(width: size, height: size)
+            .background((download.isPaused ? Color.orange : Color.blue).opacity(0.12))
+            .clipShape(Circle())
+    }
+
+    private var downloadInfoFlow: some View {
+        FlowLayout(spacing: 6) {
+            if !download.displaySubtitle.isEmpty {
+                downloadInfoChip(download.displaySubtitle)
+            }
+            if let progress = download.progress, !progress.isEmpty {
+                downloadInfoChip(progress)
+            }
+            if let leftTime = download.leftTime, !leftTime.isEmpty {
+                downloadInfoChip(leftTime)
+            }
         }
+    }
+
+    private func downloadInfoChip(_ text: String) -> some View {
+        Text(text)
+            .font(.system(size: 11, weight: .medium))
+            .foregroundStyle(.secondary)
+            .lineLimit(2)
+            .fixedSize(horizontal: false, vertical: true)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(.quaternary.opacity(0.42))
+            .clipShape(Capsule())
+    }
+
+    @ViewBuilder
+    private var actionButtons: some View {
+        HStack(spacing: isCompact ? 4 : 6) {
+            if download.canModify {
+                Button {
+                    onToggle()
+                } label: {
+                    Image(systemName: download.isPaused ? "play.fill" : "pause.fill")
+                        .frame(width: isCompact ? 28 : nil, height: isCompact ? 28 : nil)
+                }
+                .help(download.isPaused ? "恢复下载" : "暂停下载")
+            }
+
+            if download.canDelete {
+                Button(role: .destructive) {
+                    onDelete()
+                } label: {
+                    Image(systemName: "trash")
+                        .frame(width: isCompact ? 28 : nil, height: isCompact ? 28 : nil)
+                }
+                .help("删除下载任务")
+            }
+        }
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .disabled(isPerformingAction)
     }
 
     private var progressValue: Double? {
@@ -359,9 +505,14 @@ private struct MoviePilotSubscriptionRow: View {
     let onToggle: () -> Void
     let onDelete: () -> Void
     @State private var isHovered = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(spacing: 14) {
+        VStack(alignment: .leading, spacing: 10) {
             if let detailRoute {
                 Button {
                     onOpen(detailRoute)
@@ -376,7 +527,9 @@ private struct MoviePilotSubscriptionRow: View {
                     .help("未匹配到 Trakt 详情")
             }
 
-            HStack(spacing: 6) {
+            HStack(spacing: 8) {
+                Spacer(minLength: 0)
+
                 Button {
                     onToggle()
                 } label: {
@@ -550,7 +703,7 @@ private struct MoviePilotMessageRow: View {
     }
 
     private var displayTitle: String {
-        MoviePilotMessageTextFormatter.cleaned(message.title) ?? "MoviePilot 消息"
+        MoviePilotMessageTextFormatter.cleaned(message.title) ?? L10n.string("媒体助手消息")
     }
 
     private var displayText: String? {

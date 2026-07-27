@@ -48,9 +48,9 @@ final class SearchViewModel {
             results = newItems
             canLoadMore = newItems.count == pageSize
         } catch {
-            errorMessage = "搜索失败: \(error.localizedDescription)"
+            errorMessage = L10n.string("搜索失败: %@", error.localizedDescription)
             canLoadMore = false
-            print(errorMessage ?? "搜索失败")
+            print(errorMessage ?? L10n.string("搜索失败"))
         }
     }
 
@@ -68,8 +68,8 @@ final class SearchViewModel {
             let appendedCount = appendUnique(newItems)
             canLoadMore = newItems.count == pageSize && appendedCount > 0
         } catch {
-            errorMessage = "加载更多搜索结果失败: \(error.localizedDescription)"
-            print(errorMessage ?? "加载更多搜索结果失败")
+            errorMessage = L10n.string("加载更多搜索结果失败: %@", error.localizedDescription)
+            print(errorMessage ?? L10n.string("加载更多搜索结果失败"))
         }
     }
 

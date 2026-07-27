@@ -116,6 +116,24 @@ import Foundation
         return result
     }
 
+    static func hasWatched(type: String, id: Int) async throws -> Bool {
+        let result: [HistoryItemDTO] = try await TraktAPIClient.shared.request(
+            uri: "/users/me/history/\(type)/\(id)",
+            params: TraktEndpoint.makePagination(page: 1, limit: 1),
+            requiresAuth: true
+        )
+        return !result.isEmpty
+    }
+
+    static func hasWatchedShow(id: Int) async throws -> Bool {
+        let progress: ShowProgressDTO = try await TraktAPIClient.shared.request(
+            uri: "/shows/\(id)/progress/watched",
+            params: ["extended": "full"],
+            requiresAuth: true
+        )
+        return progress.aired > 0 && (progress.completed >= progress.aired || progress.nextEpisode == nil)
+    }
+
     static func comments(
         commentType: String = "all",
         type: String = "all",
@@ -371,17 +389,17 @@ struct UserRatingItemDTO: Codable, Identifiable {
         if let apiError = error as? APIError {
             switch apiError {
             case .unauthorized, .refreshTokenFailed:
-                return "登录状态已过期，请重新登录 Trakt"
+                return L10n.string("登录状态已过期，请重新登录 Trakt")
             case .httpError(let statusCode, _):
                 switch statusCode {
                 case 401:
-                    return "登录 Trakt 后才能发布评论"
+                    return L10n.string("登录 Trakt 后才能发布评论")
                 case 409:
-                    return "Trakt 认为这个操作已经完成过"
+                    return L10n.string("Trakt 认为这个操作已经完成过")
                 case 422:
-                    return "Trakt 没有接受这条评论，通常需要至少 5 个词"
+                    return L10n.string("Trakt 没有接受这条评论，通常需要至少 5 个词")
                 default:
-                    return "Trakt 评论请求失败: \(statusCode)"
+                    return L10n.string("Trakt 评论请求失败: %d", statusCode)
                 }
             default:
                 return apiError.localizedDescription
@@ -412,7 +430,7 @@ struct CommentDTO: Codable, Identifiable, Hashable {
         if let username = user?.username, !username.isEmpty {
             return username
         }
-        return "Trakt 用户"
+        return L10n.string("Trakt 用户")
     }
 
     var displayDate: String? {

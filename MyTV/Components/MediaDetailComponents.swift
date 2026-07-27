@@ -1,22 +1,341 @@
 import SwiftUI
 
+enum DetailWatchedDateFormatter {
+    static func parse(_ value: String?) -> Date? {
+        guard let value, !value.isEmpty else { return nil }
+        let iso8601WithFractionalSeconds = makeISO8601Formatter(withFractionalSeconds: true)
+        let iso8601 = makeISO8601Formatter(withFractionalSeconds: false)
+        if let date = iso8601WithFractionalSeconds.date(from: value) ?? iso8601.date(from: value) {
+            return date
+        }
+        return makeDateOnlyFormatter().date(from: value)
+    }
+
+    static func display(_ date: Date) -> String {
+        let formatter = DateFormatter()
+        formatter.locale = L10n.locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
+        return formatter.string(from: date)
+    }
+
+    private static func makeISO8601Formatter(withFractionalSeconds: Bool) -> ISO8601DateFormatter {
+        let formatter = ISO8601DateFormatter()
+        formatter.formatOptions = withFractionalSeconds ? [.withInternetDateTime, .withFractionalSeconds] : [.withInternetDateTime]
+        return formatter
+    }
+
+    private static func makeDateOnlyFormatter() -> DateFormatter {
+        let formatter = DateFormatter()
+        formatter.locale = Locale(identifier: "en_US_POSIX")
+        formatter.dateFormat = "yyyy-MM-dd"
+        return formatter
+    }
+}
+
+enum WatchedDateChoice: String, CaseIterable, Identifiable {
+    case now
+    case releaseDate
+    case custom
+
+    var id: String { rawValue }
+
+    func title(releaseDateLabel: String) -> String {
+        switch self {
+        case .now: return L10n.string("当前时间")
+        case .releaseDate: return releaseDateLabel
+        case .custom: return L10n.string("自定义")
+        }
+    }
+
+    var icon: String {
+        switch self {
+        case .now: return "clock.fill"
+        case .releaseDate: return "calendar.badge.clock"
+        case .custom: return "calendar"
+        }
+    }
+}
+
+struct DetailMarkWatchedButton: View {
+    let title: String
+    let releaseDate: Date?
+    let releaseDateLabel: String
+    let isSubmitting: Bool
+    let isCheckingStatus: Bool
+    let isWatched: Bool
+    let message: String?
+    let errorMessage: String?
+    let onMark: (Date) async -> Bool
+
+    @State private var isShowingSheet = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: isCompact ? 6 : 8) {
+            Button {
+                isShowingSheet = true
+            } label: {
+                Label(buttonTitle, systemImage: buttonIcon)
+                    .font(.system(size: isCompact ? 13 : 14, weight: .bold))
+                    .foregroundStyle(.white)
+                    .lineLimit(1)
+                    .padding(.horizontal, isCompact ? 13 : 16)
+                    .padding(.vertical, isCompact ? 8 : 9)
+                    .background(Capsule().fill(Color.green.gradient))
+                    .overlay {
+                        Capsule()
+                            .stroke(Color.white.opacity(0.20), lineWidth: 1)
+                    }
+                    .shadow(color: .black.opacity(0.26), radius: isCompact ? 7 : 10, y: isCompact ? 3 : 5)
+            }
+            .buttonStyle(.plain)
+            .fixedSize(horizontal: true, vertical: true)
+            .disabled(isSubmitting || isCheckingStatus)
+            .help(isWatched ? L10n.string("此条目已看，可继续添加观看记录") : L10n.string("标记这个条目为已看"))
+            .sheet(isPresented: $isShowingSheet) {
+                WatchedDatePickerSheet(
+                    title: title,
+                    releaseDate: releaseDate,
+                    releaseDateLabel: releaseDateLabel,
+                    onMark: onMark
+                )
+                .adaptiveDetailSheetFrame()
+            }
+
+            if let message {
+                Label(message, systemImage: "checkmark.circle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.green)
+                    .lineLimit(isCompact ? 2 : 3)
+                    .frame(maxWidth: isCompact ? 220 : nil, alignment: .leading)
+            }
+
+            if let errorMessage {
+                Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
+                    .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.orange)
+                    .lineLimit(isCompact ? 2 : 3)
+                    .frame(maxWidth: isCompact ? 220 : nil, alignment: .leading)
+            }
+        }
+    }
+
+    private var buttonTitle: String {
+        if isSubmitting {
+            return L10n.string("标记中...")
+        }
+        if isCheckingStatus {
+            return L10n.string("检查中...")
+        }
+        return isWatched ? L10n.string("已看") : L10n.string("标记已看")
+    }
+
+    private var buttonIcon: String {
+        if isSubmitting || isCheckingStatus {
+            return "hourglass"
+        }
+        return isWatched ? "checkmark.circle.fill" : "checkmark.circle.fill"
+    }
+}
+
+struct DetailHeroActionGroup<Content: View>: View {
+    private let content: Content
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
+
+    var body: some View {
+        if isCompact {
+            ScrollView(.horizontal, showsIndicators: false) {
+                HStack(alignment: .top, spacing: 8) {
+                    content
+                }
+                .padding(.vertical, 2)
+                .padding(.trailing, 18)
+            }
+            .scrollClipDisabled()
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .top, spacing: 10) {
+                content
+            }
+        }
+    }
+}
+
+private struct WatchedDatePickerSheet: View {
+    let title: String
+    let releaseDate: Date?
+    let releaseDateLabel: String
+    let onMark: (Date) async -> Bool
+
+    @Environment(\.dismiss) private var dismiss
+    @State private var selection: WatchedDateChoice = .now
+    @State private var customDate = Date()
+    @State private var isSubmitting = false
+
+    private var choices: [WatchedDateChoice] {
+        WatchedDateChoice.allCases.filter { choice in
+            choice != .releaseDate || releaseDate != nil
+        }
+    }
+
+    private var selectedDate: Date? {
+        switch selection {
+        case .now:
+            return Date()
+        case .releaseDate:
+            return releaseDate
+        case .custom:
+            return customDate
+        }
+    }
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 18) {
+            HStack(alignment: .firstTextBaseline) {
+                VStack(alignment: .leading, spacing: 4) {
+                    Text("选择观看日期")
+                        .font(.system(size: 22, weight: .bold))
+                    Text(title)
+                        .font(.system(size: 13, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .lineLimit(2)
+                }
+
+                Spacer()
+
+                Button {
+                    dismiss()
+                } label: {
+                    Image(systemName: "xmark")
+                        .font(.system(size: 12, weight: .bold))
+                        .frame(width: 26, height: 26)
+                }
+                .buttonStyle(.plain)
+                .background(.thinMaterial)
+                .clipShape(Circle())
+            }
+
+            VStack(spacing: 8) {
+                ForEach(choices) { choice in
+                    choiceRow(choice)
+                }
+            }
+
+            if selection == .custom {
+                DatePicker(
+                    "观看日期",
+                    selection: $customDate,
+                    displayedComponents: [.date, .hourAndMinute]
+                )
+                .datePickerStyle(.compact)
+            }
+
+            Button {
+                Task { await submit() }
+            } label: {
+                Label(isSubmitting ? L10n.string("标记中...") : L10n.string("完成"), systemImage: "checkmark.circle")
+                    .frame(maxWidth: .infinity)
+            }
+            .buttonStyle(.borderedProminent)
+            .disabled(isSubmitting || selectedDate == nil)
+        }
+        .padding(22)
+    }
+
+    private func choiceRow(_ choice: WatchedDateChoice) -> some View {
+        Button {
+            selection = choice
+        } label: {
+            HStack(spacing: 12) {
+                Image(systemName: choice.icon)
+                    .font(.system(size: 14, weight: .bold))
+                    .foregroundStyle(selection == choice ? Color.green : Color.accentColor)
+                    .frame(width: 28, height: 28)
+                    .background((selection == choice ? Color.green : Color.accentColor).opacity(0.12))
+                    .clipShape(Circle())
+
+                VStack(alignment: .leading, spacing: 2) {
+                    Text(choice.title(releaseDateLabel: releaseDateLabel))
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.primary)
+
+                    if let subtitle = subtitle(for: choice) {
+                        Text(subtitle)
+                            .font(.system(size: 12, weight: .medium))
+                            .foregroundStyle(.secondary)
+                    }
+                }
+
+                Spacer()
+
+                Image(systemName: selection == choice ? "checkmark.circle.fill" : "circle")
+                    .font(.system(size: 17, weight: .semibold))
+                    .foregroundStyle(selection == choice ? Color.green : Color.secondary)
+            }
+            .padding(12)
+            .background(.thinMaterial)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        }
+        .buttonStyle(.plain)
+    }
+
+    private func subtitle(for choice: WatchedDateChoice) -> String? {
+        switch choice {
+        case .now:
+            return DetailWatchedDateFormatter.display(Date())
+        case .releaseDate:
+            return releaseDate.map(DetailWatchedDateFormatter.display)
+        case .custom:
+            return DetailWatchedDateFormatter.display(customDate)
+        }
+    }
+
+    private func submit() async {
+        guard let selectedDate, !isSubmitting else { return }
+        isSubmitting = true
+        let succeeded = await onMark(selectedDate)
+        isSubmitting = false
+        if succeeded {
+            dismiss()
+        }
+    }
+}
+
 struct DetailMetaChip: View {
     let text: String
     var icon: String?
     var tint: Color = .secondary
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(spacing: 5) {
+        HStack(spacing: isCompact ? 4 : 5) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 11, weight: .semibold))
+                    .font(.system(size: isCompact ? 10 : 11, weight: .semibold))
             }
             Text(text)
-                .font(.system(size: 12, weight: .semibold))
+                .font(.system(size: isCompact ? 11 : 12, weight: .semibold))
         }
         .foregroundStyle(tint)
-        .padding(.horizontal, 10)
-        .padding(.vertical, 6)
+        .padding(.horizontal, isCompact ? 8 : 10)
+        .padding(.vertical, isCompact ? 5 : 6)
         .background(.thinMaterial)
         .clipShape(Capsule())
         .overlay {
@@ -32,39 +351,45 @@ struct MediaListActionMenu: View {
     var prominent = true
     var iconOnly = false
     @State private var isShowingSheet = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: isCompact ? 6 : 8) {
             Button {
                 isShowingSheet = true
             } label: {
                 if iconOnly {
                     Image(systemName: viewModel.actionIcon)
-                        .font(.system(size: 15, weight: .semibold))
+                        .font(.system(size: isCompact ? 14 : 15, weight: .semibold))
                         .foregroundStyle(viewModel.hasJoinedList ? .green : .primary)
-                        .frame(width: 30, height: 28)
+                        .frame(width: isCompact ? 28 : 30, height: isCompact ? 27 : 28)
                 } else {
                     Label(viewModel.actionTitle, systemImage: viewModel.actionIcon)
-                        .font(.system(size: 14, weight: .bold))
+                        .font(.system(size: isCompact ? 13 : 14, weight: .bold))
                         .foregroundStyle(prominent ? .white : .primary)
-                        .padding(.horizontal, prominent ? 16 : 13)
-                        .padding(.vertical, prominent ? 9 : 7)
+                        .lineLimit(1)
+                        .padding(.horizontal, prominent ? (isCompact ? 13 : 16) : (isCompact ? 11 : 13))
+                        .padding(.vertical, prominent ? (isCompact ? 8 : 9) : (isCompact ? 7 : 7))
                         .background(actionBackground)
                         .clipShape(Capsule())
                         .overlay {
                             Capsule()
                                 .stroke((prominent ? Color.white : Color.primary).opacity(0.20), lineWidth: 1)
                         }
-                        .shadow(color: prominent ? .black.opacity(0.26) : .clear, radius: 10, y: 5)
+                        .shadow(color: prominent ? .black.opacity(0.26) : .clear, radius: isCompact ? 7 : 10, y: isCompact ? 3 : 5)
                 }
             }
             .buttonStyle(.plain)
-            .fixedSize()
+            .fixedSize(horizontal: true, vertical: true)
             .disabled(target == nil || viewModel.isSubmitting)
             .help(viewModel.hasJoinedList ? "管理观看清单和自定义列表" : "加入观看清单或自定义列表")
             .sheet(isPresented: $isShowingSheet) {
                 MediaListActionSheet(target: target, viewModel: viewModel)
-                    .frame(width: 460)
+                    .adaptiveDetailSheetFrame()
             }
             .task(id: target) {
                 await viewModel.loadStateIfNeeded(for: target)
@@ -75,12 +400,16 @@ struct MediaListActionMenu: View {
                     Label(message, systemImage: "checkmark.circle.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.green)
+                        .lineLimit(isCompact ? 2 : 3)
+                        .frame(maxWidth: isCompact ? 220 : nil, alignment: .leading)
                 }
 
                 if let errorMessage = viewModel.errorMessage {
                     Label(errorMessage, systemImage: "exclamationmark.triangle.fill")
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.orange)
+                        .lineLimit(isCompact ? 2 : 3)
+                        .frame(maxWidth: isCompact ? 220 : nil, alignment: .leading)
                 }
             }
         }
@@ -115,7 +444,8 @@ private struct MediaListActionSheet: View {
     ]
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 18) {
+        ScrollView {
+            VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
                     Text(viewModel.hasJoinedList ? "管理列表" : "加入列表")
@@ -123,6 +453,7 @@ private struct MediaListActionSheet: View {
                     Text(viewModel.hasJoinedList ? "当前条目已加入至少一个列表，可继续加入其他列表。" : "选择观看清单、自定义列表，或新建一个列表。")
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
                 }
 
                 Spacer()
@@ -232,8 +563,9 @@ private struct MediaListActionSheet: View {
                     .font(.system(size: 13, weight: .semibold))
                     .foregroundStyle(.orange)
             }
+            }
+            .padding(22)
         }
-        .padding(22)
         .task(id: target) {
             await viewModel.loadStateIfNeeded(for: target)
         }
@@ -362,49 +694,52 @@ struct DetailHeroArtworkView: View {
     var dimming: Double
 
     var body: some View {
-        ZStack {
-            AsyncPosterImage(urlString: urlString)
-                .frame(maxWidth: .infinity)
-                .frame(height: height)
-                .saturation(0.92)
-                .brightness(-0.05)
-                .clipped()
+        GeometryReader { proxy in
+            ZStack {
+                AsyncPosterImage(urlString: urlString)
+                    .frame(width: proxy.size.width, height: height)
+                    .saturation(0.92)
+                    .brightness(-0.05)
+                    .clipped()
 
-            Color.black.opacity(dimming)
+                Color.black.opacity(dimming)
 
-            LinearGradient(
-                colors: [
-                    .black.opacity(0.34),
-                    .black.opacity(0.10),
-                    .black.opacity(0.78)
-                ],
-                startPoint: .top,
-                endPoint: .bottom
-            )
-
-            LinearGradient(
-                colors: [
-                    .black.opacity(0.86),
-                    .black.opacity(0.32),
-                    .black.opacity(0.08),
-                    .black.opacity(0.20)
-                ],
-                startPoint: .leading,
-                endPoint: .trailing
-            )
-
-            VStack {
-                Spacer()
                 LinearGradient(
                     colors: [
-                        .clear,
-                        Color(nsColor: .windowBackgroundColor).opacity(0.34)
+                        .black.opacity(0.34),
+                        .black.opacity(0.10),
+                        .black.opacity(0.78)
                     ],
                     startPoint: .top,
                     endPoint: .bottom
                 )
-                .frame(height: 74)
+
+                LinearGradient(
+                    colors: [
+                        .black.opacity(0.86),
+                        .black.opacity(0.32),
+                        .black.opacity(0.08),
+                        .black.opacity(0.20)
+                    ],
+                    startPoint: .leading,
+                    endPoint: .trailing
+                )
+
+                VStack {
+                    Spacer()
+                    LinearGradient(
+                        colors: [
+                            .clear,
+                            platformWindowBackgroundColor.opacity(0.34)
+                        ],
+                        startPoint: .top,
+                        endPoint: .bottom
+                    )
+                    .frame(height: 74)
+                }
             }
+            .frame(width: proxy.size.width, height: height)
+            .clipped()
         }
         .frame(maxWidth: .infinity)
         .frame(height: height)
@@ -415,6 +750,11 @@ struct DetailHeroArtworkView: View {
 struct DetailSectionCard<Content: View>: View {
     let title: String
     private let content: Content
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     init(title: String, @ViewBuilder content: () -> Content) {
         self.title = title
@@ -422,13 +762,13 @@ struct DetailSectionCard<Content: View>: View {
     }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: isCompact ? 10 : 14) {
             Text(title)
-                .font(.system(size: 18, weight: .bold))
+                .font(.system(size: isCompact ? 16 : 18, weight: .bold))
 
             content
         }
-        .padding(20)
+        .padding(isCompact ? 14 : 20)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -442,20 +782,41 @@ struct DetailSectionCard<Content: View>: View {
 struct DetailInfoRow: View {
     let title: String
     let value: String
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(alignment: .firstTextBaseline, spacing: 12) {
-            Text(title)
-                .font(.system(size: 12, weight: .medium))
-                .foregroundStyle(.secondary)
-                .frame(width: 70, alignment: .leading)
+        if isCompact {
+            VStack(alignment: .leading, spacing: 3) {
+                titleText
+                valueText
+            }
+            .frame(maxWidth: .infinity, alignment: .leading)
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 12) {
+                titleText
+                    .frame(width: 70, alignment: .leading)
 
-            Text(value)
-                .font(.system(size: 13, weight: .semibold))
-                .foregroundStyle(.primary)
-                .lineLimit(2)
-                .frame(maxWidth: .infinity, alignment: .leading)
+                valueText
+            }
         }
+    }
+
+    private var titleText: some View {
+        Text(title)
+            .font(.system(size: 12, weight: .medium))
+            .foregroundStyle(.secondary)
+    }
+
+    private var valueText: some View {
+        Text(value)
+            .font(.system(size: 13, weight: .semibold))
+            .foregroundStyle(.primary)
+            .lineLimit(isCompact ? 3 : 2)
+            .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -464,26 +825,32 @@ struct DetailStatTile: View {
     let value: String
     var icon: String?
     var tint: Color = .accentColor
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 8) {
+        VStack(alignment: .leading, spacing: isCompact ? 6 : 8) {
             if let icon {
                 Image(systemName: icon)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                     .foregroundStyle(tint)
             }
 
             Text(value)
-                .font(.system(size: 24, weight: .bold))
+                .font(.system(size: isCompact ? 18 : 24, weight: .bold))
                 .lineLimit(1)
+                .minimumScaleFactor(0.78)
 
             Text(title)
-                .font(.system(size: 12, weight: .medium))
+                .font(.system(size: isCompact ? 11 : 12, weight: .medium))
                 .foregroundStyle(.secondary)
                 .lineLimit(1)
         }
-        .padding(16)
-        .frame(maxWidth: .infinity, minHeight: 108, alignment: .leading)
+        .padding(isCompact ? 12 : 16)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 78 : 108, alignment: .leading)
         .background(.thinMaterial)
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
@@ -493,16 +860,52 @@ struct DetailStatTile: View {
     }
 }
 
-struct DetailGenreCloud: View {
-    let genres: [String]
+struct DetailStatGrid<Content: View>: View {
+    private let content: Content
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    init(@ViewBuilder content: () -> Content) {
+        self.content = content()
+    }
 
     var body: some View {
-        FlowLayout(spacing: 8) {
+        if isCompact {
+            LazyVGrid(
+                columns: [
+                    GridItem(.flexible(), spacing: 10),
+                    GridItem(.flexible(), spacing: 10)
+                ],
+                spacing: 10
+            ) {
+                content
+            }
+        } else {
+            VStack(spacing: 12) {
+                content
+            }
+        }
+    }
+}
+
+struct DetailGenreCloud: View {
+    let genres: [String]
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    var body: some View {
+        FlowLayout(spacing: isCompact ? 6 : 8) {
             ForEach(genres, id: \.self) { genre in
                 Text(genre)
-                    .font(.system(size: 12, weight: .semibold))
-                    .padding(.horizontal, 10)
-                    .padding(.vertical, 6)
+                    .font(.system(size: isCompact ? 11 : 12, weight: .semibold))
+                    .padding(.horizontal, isCompact ? 8 : 10)
+                    .padding(.vertical, isCompact ? 5 : 6)
                     .background(.quaternary.opacity(0.65))
                     .clipShape(Capsule())
             }
@@ -514,10 +917,15 @@ struct DetailCommentsSection: View {
     let store: CommentInteractionStore
     let isLoggedIn: Bool
     let onSubmit: () -> Void
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         DetailSectionCard(title: "评论") {
-            VStack(alignment: .leading, spacing: 16) {
+            VStack(alignment: .leading, spacing: isCompact ? 12 : 16) {
                 HStack {
                     Text("来自 Trakt")
                         .font(.system(size: 12, weight: .semibold))
@@ -596,7 +1004,7 @@ struct DetailCommentsSection: View {
                 set: { store.commentDraft = $0 }
             ))
                 .font(.system(size: 13))
-                .frame(minHeight: 86)
+                .frame(minHeight: isCompact ? 72 : 86)
                 .padding(8)
                 .scrollContentBackground(.hidden)
                 .background(.quaternary.opacity(0.45))
@@ -617,34 +1025,67 @@ struct DetailCommentsSection: View {
                 }
                 .disabled(!isLoggedIn || store.isPostingComment)
 
-            HStack(spacing: 12) {
+            if isCompact {
                 Toggle("包含剧透", isOn: Binding(
                     get: { store.commentHasSpoiler },
                     set: { store.commentHasSpoiler = $0 }
                 ))
-                    .toggleStyle(.checkbox)
+                    .platformCheckboxToggleStyle()
                     .disabled(!isLoggedIn || store.isPostingComment)
 
                 Text("Trakt 通常要求评论至少 5 个词，200 词以上会作为 review。")
                     .font(.system(size: 11, weight: .medium))
                     .foregroundStyle(.tertiary)
-                    .lineLimit(1)
+                    .lineLimit(2)
+                    .fixedSize(horizontal: false, vertical: true)
 
-                Spacer()
+                submitButton
+                    .frame(maxWidth: .infinity)
+            } else {
+                HStack(spacing: 12) {
+                    Toggle("包含剧透", isOn: Binding(
+                        get: { store.commentHasSpoiler },
+                        set: { store.commentHasSpoiler = $0 }
+                    ))
+                        .platformCheckboxToggleStyle()
+                        .disabled(!isLoggedIn || store.isPostingComment)
 
-                Button {
-                    onSubmit()
-                } label: {
-                    if store.isPostingComment {
-                        ProgressView()
-                            .controlSize(.small)
-                    } else {
-                        Text("发布")
-                    }
+                    Text("Trakt 通常要求评论至少 5 个词，200 词以上会作为 review。")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+                        .lineLimit(1)
+
+                    Spacer()
+
+                    submitButton
                 }
-                .disabled(!canSubmit)
             }
         }
+    }
+
+    @ViewBuilder
+    private var submitButton: some View {
+        if isCompact {
+            submitButtonBase
+                .buttonStyle(.borderedProminent)
+        } else {
+            submitButtonBase
+                .buttonStyle(.bordered)
+        }
+    }
+
+    private var submitButtonBase: some View {
+        Button {
+            onSubmit()
+        } label: {
+            if store.isPostingComment {
+                ProgressView()
+                    .controlSize(.small)
+            } else {
+                Text("发布")
+            }
+        }
+        .disabled(!canSubmit)
     }
 
     private var canSubmit: Bool {
@@ -659,49 +1100,21 @@ private struct DetailCommentThreadView: View {
 
     @State private var showsReplies = false
     @State private var showsReplyComposer = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 10) {
+        VStack(alignment: .leading, spacing: isCompact ? 8 : 10) {
             DetailCommentRow(
                 comment: comment,
                 likeCount: store.displayLikeCount(for: comment),
                 replyCount: store.displayReplyCount(for: comment)
             )
 
-            HStack(spacing: 10) {
-                Button {
-                    Task { await store.toggleLike(for: comment) }
-                } label: {
-                    Label(
-                        store.isLiked(comment) ? "已赞" : "赞",
-                        systemImage: store.isLiked(comment) ? "hand.thumbsup.fill" : "hand.thumbsup"
-                    )
-                }
-                .disabled(!isLoggedIn || store.isLiking(comment))
-
-                if store.displayReplyCount(for: comment) > 0 {
-                    Button {
-                        showsReplies.toggle()
-                        if showsReplies && store.repliesByCommentId[comment.id] == nil {
-                            Task { await store.loadReplies(for: comment) }
-                        }
-                    } label: {
-                        Label(showsReplies ? "隐藏回复" : "查看回复", systemImage: "bubble.left.and.bubble.right")
-                    }
-                }
-
-                Button {
-                    showsReplyComposer.toggle()
-                } label: {
-                    Label("回复", systemImage: "arrowshape.turn.up.left")
-                }
-                .disabled(!isLoggedIn)
-            }
-            .font(.system(size: 12, weight: .semibold))
-            .buttonStyle(.borderless)
-            .controlSize(.small)
-            .foregroundStyle(.secondary)
-            .padding(.horizontal, 2)
+            commentActions
 
             if showsReplyComposer {
                 replyComposer
@@ -711,10 +1124,59 @@ private struct DetailCommentThreadView: View {
                 repliesView
             }
         }
-        .padding(14)
+        .padding(isCompact ? 12 : 14)
         .frame(maxWidth: .infinity, alignment: .leading)
         .background(.quaternary.opacity(0.32))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var commentActions: some View {
+        FlowLayout(spacing: isCompact ? 8 : 10) {
+            likeButton
+
+            if store.displayReplyCount(for: comment) > 0 {
+                repliesButton
+            }
+
+            replyButton
+        }
+        .font(.system(size: 12, weight: .semibold))
+        .buttonStyle(.borderless)
+        .controlSize(.small)
+        .foregroundStyle(.secondary)
+        .padding(.horizontal, 2)
+    }
+
+    private var likeButton: some View {
+        Button {
+            Task { await store.toggleLike(for: comment) }
+        } label: {
+            Label(
+                store.isLiked(comment) ? "已赞" : "赞",
+                systemImage: store.isLiked(comment) ? "hand.thumbsup.fill" : "hand.thumbsup"
+            )
+        }
+        .disabled(!isLoggedIn || store.isLiking(comment))
+    }
+
+    private var repliesButton: some View {
+        Button {
+            showsReplies.toggle()
+            if showsReplies && store.repliesByCommentId[comment.id] == nil {
+                Task { await store.loadReplies(for: comment) }
+            }
+        } label: {
+            Label(showsReplies ? "隐藏回复" : "查看回复", systemImage: "bubble.left.and.bubble.right")
+        }
+    }
+
+    private var replyButton: some View {
+        Button {
+            showsReplyComposer.toggle()
+        } label: {
+            Label("回复", systemImage: "arrowshape.turn.up.left")
+        }
+        .disabled(!isLoggedIn)
     }
 
     private var replyComposer: some View {
@@ -751,7 +1213,7 @@ private struct DetailCommentThreadView: View {
                         }
                     }
                 ))
-                .toggleStyle(.checkbox)
+                .platformCheckboxToggleStyle()
 
                 Spacer()
 
@@ -831,35 +1293,15 @@ private struct DetailCommentRow: View {
     let likeCount: Int
     let replyCount: Int
     @State private var revealsSpoiler = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
-            HStack(alignment: .firstTextBaseline, spacing: 8) {
-                Text(comment.displayName)
-                    .font(.system(size: 13, weight: .bold))
-
-                if let date = comment.displayDate {
-                    Text(date)
-                        .font(.system(size: 11, weight: .medium))
-                        .foregroundStyle(.tertiary)
-                }
-
-                Spacer()
-
-                HStack(spacing: 8) {
-                    if comment.review == true {
-                        Label("Review", systemImage: "text.bubble.fill")
-                    }
-                    if likeCount > 0 {
-                        Label("\(likeCount)", systemImage: "hand.thumbsup.fill")
-                    }
-                    if replyCount > 0 {
-                        Label("\(replyCount)", systemImage: "arrowshape.turn.up.left.fill")
-                    }
-                }
-                .font(.system(size: 11, weight: .semibold))
-                .foregroundStyle(.secondary)
-            }
+            commentHeader
 
             if comment.spoiler == true && !revealsSpoiler {
                 HStack(spacing: 10) {
@@ -881,5 +1323,83 @@ private struct DetailCommentRow: View {
             }
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    @ViewBuilder
+    private var commentHeader: some View {
+        if isCompact {
+            VStack(alignment: .leading, spacing: 5) {
+                authorAndDate
+                commentBadges
+            }
+        } else {
+            HStack(alignment: .firstTextBaseline, spacing: 8) {
+                authorAndDate
+                Spacer()
+                commentBadges
+            }
+        }
+    }
+
+    private var authorAndDate: some View {
+        HStack(alignment: .firstTextBaseline, spacing: 8) {
+            Text(comment.displayName)
+                .font(.system(size: 13, weight: .bold))
+                .lineLimit(1)
+
+            if let date = comment.displayDate {
+                Text(date)
+                    .font(.system(size: 11, weight: .medium))
+                    .foregroundStyle(.tertiary)
+                    .lineLimit(1)
+            }
+        }
+    }
+
+    private var commentBadges: some View {
+        HStack(spacing: 8) {
+            if comment.review == true {
+                Label("Review", systemImage: "text.bubble.fill")
+            }
+            if likeCount > 0 {
+                Label("\(likeCount)", systemImage: "hand.thumbsup.fill")
+            }
+            if replyCount > 0 {
+                Label("\(replyCount)", systemImage: "arrowshape.turn.up.left.fill")
+            }
+        }
+        .font(.system(size: 11, weight: .semibold))
+        .foregroundStyle(.secondary)
+    }
+}
+
+private var platformWindowBackgroundColor: Color {
+    #if os(macOS)
+    Color(nsColor: .windowBackgroundColor)
+    #else
+    Color(uiColor: .systemBackground)
+    #endif
+}
+
+extension View {
+    @ViewBuilder
+    func platformCheckboxToggleStyle() -> some View {
+        #if os(macOS)
+        toggleStyle(.checkbox)
+        #else
+        toggleStyle(.switch)
+        #endif
+    }
+
+    @ViewBuilder
+    func adaptiveDetailSheetFrame() -> some View {
+        #if os(iOS)
+        self
+            .frame(maxWidth: 520)
+            .presentationDetents([.medium, .large])
+            .presentationDragIndicator(.visible)
+        #else
+        self.frame(width: 460)
+        #endif
     }
 }

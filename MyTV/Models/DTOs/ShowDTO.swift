@@ -25,12 +25,84 @@ struct ShowDTO: Codable, Identifiable, Hashable {
 
     var id: Int { ids.trakt }
 
+    init(
+        title: String,
+        year: Int?,
+        ids: ShowIds,
+        images: ImagesDTO?,
+        overview: String?,
+        rating: Double?,
+        votes: Int?,
+        genres: [String]?,
+        runtime: Int?,
+        released: String?,
+        trailer: String?,
+        watchers: Int?,
+        status: String?,
+        network: String?,
+        country: String?,
+        language: String?,
+        airedEpisodes: Int?,
+        totalEpisodes: Int?,
+        seasons: Int?
+    ) {
+        self.title = title
+        self.year = year
+        self.ids = ids
+        self.images = images
+        self.overview = overview
+        self.rating = rating
+        self.votes = votes
+        self.genres = genres
+        self.runtime = runtime
+        self.released = released
+        self.trailer = trailer
+        self.watchers = watchers
+        self.status = status
+        self.network = network
+        self.country = country
+        self.language = language
+        self.airedEpisodes = airedEpisodes
+        self.totalEpisodes = totalEpisodes
+        self.seasons = seasons
+    }
+
     enum CodingKeys: String, CodingKey {
         case title, year, ids, images, overview, rating, votes, genres, runtime
         case released, trailer, watchers, status, network, country, language
         case airedEpisodes = "aired_episodes"
         case totalEpisodes = "total_episodes"
         case seasons
+    }
+}
+
+extension ShowDTO {
+    var hasPosterImage: Bool {
+        images?.poster?.first != nil
+    }
+
+    func withImages(_ replacementImages: ImagesDTO?) -> ShowDTO {
+        ShowDTO(
+            title: title,
+            year: year,
+            ids: ids,
+            images: replacementImages ?? images,
+            overview: overview,
+            rating: rating,
+            votes: votes,
+            genres: genres,
+            runtime: runtime,
+            released: released,
+            trailer: trailer,
+            watchers: watchers,
+            status: status,
+            network: network,
+            country: country,
+            language: language,
+            airedEpisodes: airedEpisodes,
+            totalEpisodes: totalEpisodes,
+            seasons: seasons
+        )
     }
 }
 

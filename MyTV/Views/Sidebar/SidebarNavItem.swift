@@ -5,7 +5,7 @@ struct SidebarNavItem: View {
 
     var body: some View {
         Label {
-            Text(section.rawValue)
+            Text(section.titleKey)
                 .font(.system(size: 13))
         } icon: {
             Image(systemName: section.icon)

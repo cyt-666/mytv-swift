@@ -6,8 +6,10 @@ enum ProgressAPI {
 
     static func upNext() async throws -> [UpNextItemDTO] {
         if let cached: [UpNextItemDTO] = await CacheService.getAPIResponse(key: cacheKey) {
-            Task { _ = try? await fetchAndCache() }
-            return cached
+            if cached.allSatisfy({ $0.hasDisplayImage }) {
+                Task { _ = try? await fetchAndCache() }
+                return cached
+            }
         }
         return try await fetchAndCache()
     }
@@ -36,12 +38,13 @@ enum ProgressAPI {
                 group.addTask {
                     let progress: ShowProgressDTO = try await TraktAPIClient.shared.request(
                         uri: "/shows/\(watched.show.ids.trakt)/progress/watched",
-                        params: ["extended": "full"],
+                        params: ["extended": "full,images"],
                         requiresAuth: true
                     )
                     guard let nextEp = progress.nextEpisode else { return nil }
+                    let show = await showWithImagesIfNeeded(watched.show)
                     return UpNextItemDTO(
-                        show: watched.show,
+                        show: show,
                         nextEpisode: nextEp,
                         progress: ShowProgressSummaryDTO(
                             aired: progress.aired,
@@ -58,6 +61,19 @@ enum ProgressAPI {
                 if let item { results.append(item) }
             }
             return results.sorted { ($0.progress.lastWatchedAt ?? "") > ($1.progress.lastWatchedAt ?? "") }
+        }
+    }
+
+    private static func showWithImagesIfNeeded(_ show: ShowDTO) async -> ShowDTO {
+        guard show.images?.bestPosterURL == nil else { return show }
+
+        do {
+            let details = try await ShowAPI.details(id: show.ids.trakt)
+            guard details.images?.bestPosterURL != nil else { return show }
+            return show.withImages(details.images)
+        } catch {
+            print("补齐继续观看剧集海报失败 \(show.ids.trakt): \(error)")
+            return show
         }
     }
 

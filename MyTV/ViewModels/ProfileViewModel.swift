@@ -134,9 +134,9 @@ final class ProfileViewModel {
         let commentText: String
 
         if comment.spoiler == true {
-            commentText = "含剧透内容"
+            commentText = L10n.string("含剧透内容")
         } else {
-            commentText = Self.cleanedText(comment.comment) ?? (isReview ? "发表了一篇影评" : "发表了一条评论")
+            commentText = Self.cleanedText(comment.comment) ?? (isReview ? L10n.string("发表了一篇影评") : L10n.string("发表了一条评论"))
         }
 
         return ProfileActivityItem(
@@ -186,14 +186,14 @@ final class ProfileViewModel {
         if let movie {
             return ProfileActivityMediaInfo(
                 title: movie.title,
-                subtitle: movie.year.map { "电影 · \($0)" } ?? "电影",
+                subtitle: movie.year.map { L10n.string("电影 · %@", "\($0)") } ?? L10n.string("电影"),
                 posterURL: movie.images?.poster?.first,
                 route: .movieDetail(id: movie.ids.trakt)
             )
         }
 
         if let episode {
-            let title = show?.title ?? episode.title ?? "未知剧集"
+            let title = show?.title ?? episode.title ?? L10n.string("未知剧集")
             let episodeTitle = episode.title.map { " · \($0)" } ?? ""
             let route: Route?
             if let show {
@@ -215,7 +215,7 @@ final class ProfileViewModel {
         }
 
         if let season {
-            let title = show?.title ?? season.title ?? "未知剧集"
+            let title = show?.title ?? season.title ?? L10n.string("未知剧集")
             let route: Route?
             if let show {
                 route = .seasonDetail(showId: show.ids.trakt, seasonNumber: season.number)
@@ -225,7 +225,7 @@ final class ProfileViewModel {
 
             return ProfileActivityMediaInfo(
                 title: title,
-                subtitle: "第 \(season.number) 季",
+                subtitle: L10n.string("第 %d 季", season.number),
                 posterURL: show?.images?.poster?.first ?? season.images?.poster?.first,
                 route: route
             )
@@ -234,15 +234,15 @@ final class ProfileViewModel {
         if let show {
             return ProfileActivityMediaInfo(
                 title: show.title,
-                subtitle: show.year.map { "剧集 · \($0)" } ?? "剧集",
+                subtitle: show.year.map { L10n.string("剧集 · %@", "\($0)") } ?? L10n.string("剧集"),
                 posterURL: show.images?.poster?.first,
                 route: .showDetail(id: show.ids.trakt)
             )
         }
 
         return ProfileActivityMediaInfo(
-            title: "未知内容",
-            subtitle: type ?? "动态",
+            title: L10n.string("未知内容"),
+            subtitle: type ?? L10n.string("动态"),
             posterURL: nil,
             route: nil
         )
@@ -261,12 +261,13 @@ final class ProfileViewModel {
     private static func formatActivityDate(_ value: String?) -> String {
         guard let value,
               let date = MonthlyWatchStatsService.parseTraktDate(value) else {
-            return value.map { String($0.prefix(10)) } ?? "未知时间"
+            return value.map { String($0.prefix(10)) } ?? L10n.string("未知时间")
         }
 
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy-MM-dd HH:mm"
+        formatter.locale = L10n.locale
+        formatter.dateStyle = .medium
+        formatter.timeStyle = .short
         return formatter.string(from: date)
     }
 }
@@ -286,9 +287,9 @@ struct ProfileActivityItem: Identifiable, Hashable {
 
         var title: String {
             switch self {
-            case .comment: return "评论"
-            case .review: return "影评"
-            case .rating: return "评分"
+            case .comment: return L10n.string("评论")
+            case .review: return L10n.string("影评")
+            case .rating: return L10n.string("评分")
             }
         }
 

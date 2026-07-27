@@ -1,6 +1,6 @@
 # MyTV
 
-MyTV 是一个 macOS 上的 Trakt.tv 观影助手，使用 SwiftUI 构建。它可以浏览电影和剧集、查看详情、同步 Trakt 观看记录、观看清单、收藏、日历和评论等数据。
+MyTV 是一个 SwiftUI 构建的 Trakt.tv 观影助手，提供 macOS 应用和 iPhone/iPad Universal iOS 应用。它可以浏览电影和剧集、查看详情、同步 Trakt 观看记录、观看清单、收藏、日历和评论等数据。
 
 ## 功能
 
@@ -10,15 +10,19 @@ MyTV 是一个 macOS 上的 Trakt.tv 观影助手，使用 SwiftUI 构建。它�
 - 观看清单、观看历史、我的片库和待看进度
 - 电影、剧集、季和单集详情页
 - Trakt 评论读取与发布
+- 媒体助手订阅、下载任务、消息和通知
 - 图片和 API 响应缓存
 
 ## 环境要求
 
-- macOS 15.0 或更高版本
+- macOS 15.0 或更高版本（macOS 版）
+- iOS/iPadOS 18.0 或更高版本（iOS 版）
 - Xcode 16 或更高版本
 - XcodeGen
 
 如果本机没有安装 XcodeGen，构建脚本会尝试通过 Homebrew 自动安装。
+
+如果使用较新的 Xcode，请在 `Xcode -> Settings -> Components` 中安装对应的 iOS Platform / Simulator Runtime，例如 iOS 26.5；否则 iOS simulator build 可能找不到目的地。
 
 ## 使用自己的 Trakt Client ID
 
@@ -28,9 +32,19 @@ MyTV 需要一个 Trakt API 应用的 `client_id` 才能完成登录和 API 请�
 
 ```bash
 TRAKT_CLIENT_ID=your_client_id
+DEVELOPMENT_TEAM=your_team_id # 可选，真机调试时用于固定签名 Team
 ```
 
 `.env.local` 已被 `.gitignore` 忽略，适合放本机配置。请不要把 `client_secret`、access token 或 refresh token 提交到仓库。
+
+如果直接从 Xcode GUI 运行，请先把 `.env.local` 同步成 Xcode 能读取的本地 xcconfig：
+
+```bash
+bash scripts/sync-local-xcconfig.sh
+xcodegen generate
+```
+
+生成的 `MyTV/Config/Local.xcconfig` 会被 Git 忽略，XcodeGen 会通过 `MyTV/Config/MyTV.xcconfig` 自动引用它。
 
 也可以在执行构建时临时传入：
 
@@ -40,7 +54,7 @@ TRAKT_CLIENT_ID=your_client_id bash scripts/build.sh
 
 ## 本地构建
 
-生成 Xcode 项目并构建 Release 包：
+生成 Xcode 项目并构建 macOS Release 包：
 
 ```bash
 bash scripts/build.sh
@@ -53,6 +67,18 @@ bash scripts/build.sh
 - `build/Build/Products/Release/MyTV-macOS.zip`
 
 `build/` 是构建产物目录，已被 Git 忽略。
+
+直接构建 macOS app：
+
+```bash
+TRAKT_CLIENT_ID=your_client_id xcodebuild -project MyTV.xcodeproj -scheme MyTV -destination 'platform=macOS' build
+```
+
+构建 iOS Universal app 的 Simulator 版本：
+
+```bash
+TRAKT_CLIENT_ID=your_client_id xcodebuild -project MyTV.xcodeproj -scheme MyTViOS -destination 'generic/platform=iOS Simulator' build
+```
 
 ## GitHub Actions
 
@@ -69,8 +95,9 @@ TRAKT_CLIENT_ID
 ```text
 MyTV/
   API/          Trakt API 请求封装
-  App/          应用入口、状态和常量
+  App/          共享入口、状态、路由和常量
   Components/   复用 UI 组件
+  iOS/          iOS App 入口、Info.plist 和 iPhone/iPad 外壳
   Models/       SwiftData 模型和 DTO
   Services/     认证、缓存、图片和翻译服务
   Utilities/    窗口和视觉辅助工具

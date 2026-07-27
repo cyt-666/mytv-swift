@@ -7,25 +7,31 @@ struct MoviePilotSubscribeButton: View {
     let onConfigure: () -> Void
 
     @State private var isShowingSeasonPicker = false
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         Button {
             handleTap()
         } label: {
             Label(buttonTitle, systemImage: buttonIcon)
-                .font(.system(size: 14, weight: .bold))
+                .font(.system(size: isCompact ? 13 : 14, weight: .bold))
                 .foregroundStyle(.white)
-                .padding(.horizontal, 16)
-                .padding(.vertical, 9)
+                .lineLimit(1)
+                .padding(.horizontal, isCompact ? 13 : 16)
+                .padding(.vertical, isCompact ? 8 : 9)
                 .background(buttonTint.gradient)
                 .clipShape(Capsule())
                 .overlay {
                     Capsule().stroke(Color.white.opacity(0.20), lineWidth: 1)
                 }
-                .shadow(color: .black.opacity(0.26), radius: 10, y: 5)
+                .shadow(color: .black.opacity(0.26), radius: isCompact ? 7 : 10, y: isCompact ? 3 : 5)
         }
         .buttonStyle(.plain)
-        .fixedSize()
+        .fixedSize(horizontal: true, vertical: true)
         .disabled(viewModel.isSubscribing || isFullySubscribed)
         .help(buttonHelp)
         .sheet(isPresented: $isShowingSeasonPicker) {
@@ -34,7 +40,7 @@ struct MoviePilotSubscribeButton: View {
                 seasons: seasons.filter { $0.number > 0 },
                 viewModel: viewModel
             )
-            .frame(width: 460)
+            .adaptiveDetailSheetFrame()
         }
         .task(id: target) {
             await viewModel.loadStatusIfNeeded(for: target)
@@ -42,19 +48,19 @@ struct MoviePilotSubscribeButton: View {
     }
 
     private var buttonTitle: String {
-        if viewModel.isSubscribing { return "提交中..." }
-        if !viewModel.isConfigured { return "配置 MoviePilot" }
-        if isFullySubscribed { return "已订阅" }
+        if viewModel.isSubscribing { return L10n.string("提交中...") }
+        if !viewModel.isConfigured { return L10n.string("配置 MoviePilot") }
+        if isFullySubscribed { return L10n.string("已订阅") }
         if hasLibraryReminder {
             if target.kind == .tv {
-                return viewModel.status.hasSubscription ? "已入库·继续" : "已入库·选季"
+                return viewModel.status.hasSubscription ? L10n.string("已入库·继续") : L10n.string("已入库·选季")
             }
-            return "已入库·订阅"
+            return L10n.string("已入库·订阅")
         }
         if target.kind == .tv {
-            return viewModel.status.hasSubscription ? "继续订阅" : "选季订阅"
+            return viewModel.status.hasSubscription ? L10n.string("继续订阅") : L10n.string("选季订阅")
         }
-        return "订阅 MP"
+        return L10n.string("订阅助手")
     }
 
     private var buttonIcon: String {
@@ -71,12 +77,12 @@ struct MoviePilotSubscribeButton: View {
     }
 
     private var buttonHelp: String {
-        if !viewModel.isConfigured { return "配置 MoviePilot" }
-        if isFullySubscribed { return "已添加 MoviePilot 订阅" }
+        if !viewModel.isConfigured { return L10n.string("配置 MoviePilot") }
+        if isFullySubscribed { return L10n.string("已添加 MoviePilot 订阅") }
         if hasLibraryReminder {
-            return target.kind == .tv ? "MoviePilot 已入库，可继续订阅缺失季度" : "MoviePilot 已入库，通常无需重复订阅"
+            return target.kind == .tv ? L10n.string("MoviePilot 已入库，可继续订阅缺失季度") : L10n.string("MoviePilot 已入库，通常无需重复订阅")
         }
-        return target.kind == .tv ? "添加 MoviePilot 季度订阅" : "添加 MoviePilot 订阅"
+        return target.kind == .tv ? L10n.string("添加 MoviePilot 季度订阅") : L10n.string("添加 MoviePilot 订阅")
     }
 
     private var hasLibraryReminder: Bool {
@@ -122,7 +128,7 @@ struct MoviePilotStatusPanel: View {
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
             HStack {
-                Label("MoviePilot", systemImage: "bolt.horizontal.circle.fill")
+                Label("媒体助手", systemImage: "bolt.horizontal.circle.fill")
                     .font(.system(size: 13, weight: .bold))
                     .foregroundStyle(.primary)
 
@@ -139,18 +145,18 @@ struct MoviePilotStatusPanel: View {
                         .symbolEffect(.rotate, isActive: viewModel.isLoadingStatus)
                 }
                 .buttonStyle(.borderless)
-                .help(viewModel.isConfigured ? "刷新 MoviePilot 状态" : "配置 MoviePilot")
+                .help(viewModel.isConfigured ? L10n.string("刷新 MoviePilot 状态") : L10n.string("配置 MoviePilot"))
             }
 
             if viewModel.isConfigured {
-                statusRow(title: "入库", value: viewModel.libraryLabel, icon: "externaldrive.fill", tint: viewModel.status.hasLibraryItem ? .green : .secondary)
+                statusRow(title: L10n.string("入库"), value: viewModel.libraryLabel, icon: "externaldrive.fill", tint: viewModel.status.hasLibraryItem ? .green : .secondary)
                 statusRow(
-                    title: "订阅",
+                    title: L10n.string("订阅"),
                     value: viewModel.subscriptionLabel,
                     icon: viewModel.status.hasSubscription ? "checkmark.seal.fill" : "plus.circle.fill",
                     tint: viewModel.status.hasSubscription ? .indigo : .secondary
                 )
-                statusRow(title: "下载", value: viewModel.downloadLabel, icon: "arrow.down.circle.fill", tint: viewModel.status.downloads.isEmpty ? .secondary : .blue)
+                statusRow(title: L10n.string("下载"), value: viewModel.downloadLabel, icon: "arrow.down.circle.fill", tint: viewModel.status.downloads.isEmpty ? .secondary : .blue)
 
                 if !viewModel.status.subscriptions.isEmpty || !viewModel.status.downloads.isEmpty {
                     Divider()
@@ -207,13 +213,7 @@ struct MoviePilotStatusPanel: View {
         .confirmationDialog("删除下载任务", isPresented: downloadDeleteDialog, titleVisibility: .visible) {
             Button("删除任务", role: .destructive) {
                 if let download = downloadToDelete {
-                    Task { await viewModel.deleteDownload(download, deleteFiles: false, target: target) }
-                }
-                downloadToDelete = nil
-            }
-            Button("删除任务并删除文件", role: .destructive) {
-                if let download = downloadToDelete {
-                    Task { await viewModel.deleteDownload(download, deleteFiles: true, target: target) }
+                    Task { await viewModel.deleteDownload(download, target: target) }
                 }
                 downloadToDelete = nil
             }
@@ -221,7 +221,7 @@ struct MoviePilotStatusPanel: View {
                 downloadToDelete = nil
             }
         } message: {
-            Text("默认只从下载器删除任务，不删除已下载文件。")
+            Text(downloadToDelete?.displayTitle ?? "确认删除这个下载任务？")
         }
     }
 
@@ -269,7 +269,7 @@ struct MoviePilotStatusPanel: View {
                 Text(subscription.displayTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                Text("订阅 · \(subscription.stateLabel)")
+                Text(L10n.string("订阅 · %@", subscription.stateLabel))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -285,7 +285,7 @@ struct MoviePilotStatusPanel: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(viewModel.isPerformingAction)
-            .help(subscription.isPaused ? "恢复订阅" : "暂停订阅")
+            .help(subscription.isPaused ? L10n.string("恢复订阅") : L10n.string("暂停订阅"))
 
             Button(role: .destructive) {
                 subscriptionToDelete = subscription
@@ -295,7 +295,7 @@ struct MoviePilotStatusPanel: View {
             .buttonStyle(.borderless)
             .controlSize(.small)
             .disabled(viewModel.isPerformingAction)
-            .help("删除订阅")
+            .help(L10n.string("删除订阅"))
         }
     }
 
@@ -310,7 +310,7 @@ struct MoviePilotStatusPanel: View {
                 Text(download.displayTitle)
                     .font(.system(size: 11, weight: .semibold))
                     .lineLimit(1)
-                Text("下载 · \(download.stateLabel)")
+                Text(L10n.string("下载 · %@", download.stateLabel))
                     .font(.system(size: 10, weight: .medium))
                     .foregroundStyle(.secondary)
                     .lineLimit(1)
@@ -327,7 +327,7 @@ struct MoviePilotStatusPanel: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .disabled(viewModel.isPerformingAction)
-                .help(download.isPaused ? "恢复下载" : "暂停下载")
+                .help(download.isPaused ? L10n.string("恢复下载") : L10n.string("暂停下载"))
             }
 
             if download.canDelete {
@@ -339,7 +339,7 @@ struct MoviePilotStatusPanel: View {
                 .buttonStyle(.borderless)
                 .controlSize(.small)
                 .disabled(viewModel.isPerformingAction)
-                .help("删除下载任务")
+                .help(L10n.string("删除下载任务"))
             }
         }
     }
@@ -444,7 +444,7 @@ private struct MoviePilotSeasonPickerSheet: View {
                         }
                     }
                 } label: {
-                    Label(viewModel.isSubscribing ? "提交中..." : "订阅所选", systemImage: "arrow.down.circle.fill")
+                    Label(viewModel.isSubscribing ? L10n.string("提交中...") : L10n.string("订阅所选"), systemImage: "arrow.down.circle.fill")
                 }
                 .buttonStyle(.borderedProminent)
                 .disabled(selectedSeasons.isEmpty || viewModel.isSubscribing)
@@ -473,17 +473,17 @@ private struct MoviePilotSeasonPickerSheet: View {
                     .frame(width: 24, height: 24)
 
                 VStack(alignment: .leading, spacing: 4) {
-                    Text(season.title ?? "第 \(season.number) 季")
+                    Text(season.title ?? L10n.string("第 %d 季", season.number))
                         .font(.system(size: 14, weight: .semibold))
                         .foregroundStyle(.primary)
                         .lineLimit(1)
 
                     HStack(spacing: 8) {
                         if let episodeCount = season.episodeCount {
-                            Text("\(episodeCount) 集")
+                            Text(L10n.string("%d 集", episodeCount))
                         }
                         if isSubscribed {
-                            Text("已订阅")
+                            Text(L10n.string("已订阅"))
                                 .foregroundStyle(.green)
                         }
                     }

@@ -36,6 +36,10 @@ struct ImagesDTO: Codable, Hashable {
     let logo: [String]?
     let clearart: [String]?
     let screenshot: [String]?
+
+    var bestPosterURL: String? {
+        poster?.first ?? fanart?.first ?? thumb?.first ?? banner?.first ?? screenshot?.first
+    }
 }
 
 // MARK: - Movie Details

@@ -3,9 +3,15 @@ import SwiftUI
 struct HomeView: View {
     @State private var viewModel = HomeViewModel()
     @Environment(AppState.self) private var appState
-    private let sidebarOverlapInset: CGFloat = 48
-    private let contentHorizontalPadding: CGFloat = 24
-    private let topContentPadding: CGFloat = 56
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var sidebarOverlapInset: CGFloat { isCompact ? 0 : 48 }
+    private var contentHorizontalPadding: CGFloat { isCompact ? 14 : 24 }
+    private var topContentPadding: CGFloat { isCompact ? 10 : 56 }
     private var safeLeadingInset: CGFloat { sidebarOverlapInset + contentHorizontalPadding }
 
     var body: some View {
@@ -21,7 +27,7 @@ struct HomeView: View {
                     .padding(.leading, contentHorizontalPadding)
                     .padding(.trailing, contentHorizontalPadding)
 
-                    VStack(spacing: 32) {
+                    VStack(spacing: isCompact ? 22 : 32) {
                         // Continue watching
                         if !viewModel.upNextItems.isEmpty {
                             ContinueWatchingRail(
@@ -32,7 +38,7 @@ struct HomeView: View {
                             )
                         } else if viewModel.shouldShowRailPlaceholders {
                             HomeRailPlaceholderView(
-                                title: "继续观看",
+                                title: L10n.string("继续观看"),
                                 icon: "play.circle.fill",
                                 iconColor: .orange,
                                 leadingInset: safeLeadingInset,
@@ -44,7 +50,7 @@ struct HomeView: View {
                         // Start watching (watchlist ∩ collection)
                         if !viewModel.startWatchingShows.isEmpty {
                             MediaRailView(
-                                title: "开始观看",
+                                title: L10n.string("开始观看"),
                                 items: viewModel.startWatchingShows.map { .show($0) },
                                 icon: "play.fill",
                                 iconColor: .green,
@@ -54,7 +60,7 @@ struct HomeView: View {
                             )
                         } else if viewModel.shouldShowRailPlaceholders {
                             HomeRailPlaceholderView(
-                                title: "开始观看",
+                                title: L10n.string("开始观看"),
                                 icon: "play.fill",
                                 iconColor: .green,
                                 leadingInset: safeLeadingInset,
@@ -66,7 +72,7 @@ struct HomeView: View {
                         // Recommended movies
                         if !viewModel.recommendedMovies.isEmpty {
                             MediaRailView(
-                                title: "推荐电影",
+                                title: L10n.string("推荐电影"),
                                 items: viewModel.recommendedMovies.map { .movie($0) },
                                 icon: "hand.thumbsup.fill",
                                 iconColor: GlassDesign.accentBlue,
@@ -77,7 +83,7 @@ struct HomeView: View {
                             )
                         } else if viewModel.shouldShowRailPlaceholders {
                             HomeRailPlaceholderView(
-                                title: "推荐电影",
+                                title: L10n.string("推荐电影"),
                                 icon: "hand.thumbsup.fill",
                                 iconColor: GlassDesign.accentBlue,
                                 leadingInset: safeLeadingInset,
@@ -89,7 +95,7 @@ struct HomeView: View {
                         // Recommended shows
                         if !viewModel.recommendedShows.isEmpty {
                             MediaRailView(
-                                title: "推荐剧集",
+                                title: L10n.string("推荐剧集"),
                                 items: viewModel.recommendedShows.map { .show($0) },
                                 icon: "heart.fill",
                                 iconColor: .red,
@@ -100,7 +106,7 @@ struct HomeView: View {
                             )
                         } else if viewModel.shouldShowRailPlaceholders {
                             HomeRailPlaceholderView(
-                                title: "推荐剧集",
+                                title: L10n.string("推荐剧集"),
                                 icon: "heart.fill",
                                 iconColor: .red,
                                 leadingInset: safeLeadingInset,
@@ -109,13 +115,13 @@ struct HomeView: View {
                             )
                         }
                     }
-                    .padding(.top, 26)
-                    .padding(.bottom, 36)
+                    .padding(.top, isCompact ? 18 : 26)
+                    .padding(.bottom, isCompact ? 28 : 36)
                     .frame(maxWidth: .infinity)
                 }
                 .frame(maxWidth: .infinity)
             }
-            .ignoresSafeArea(.container, edges: .top)
+            .macOSTopSafeAreaBleed()
         }
         .background(DetailBackgroundClearer())
         .task { await viewModel.load() }
@@ -139,15 +145,20 @@ private struct MonthlyStatsHeroView: View {
     let isLoading: Bool
     let isLoggedIn: Bool
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 24) {
+        VStack(alignment: .leading, spacing: isCompact ? 12 : 24) {
             header
 
             if !isLoggedIn {
                 loginPrompt
             } else if stats == nil {
-                ProgressView("正在加载本月观影数据...")
+                ProgressView(L10n.string("正在加载本月观影数据..."))
                     .frame(maxWidth: .infinity, minHeight: 210)
             } else if let stats, stats.totalCount > 0 {
                 statsContent(stats)
@@ -155,8 +166,8 @@ private struct MonthlyStatsHeroView: View {
                 emptyState
             }
         }
-        .padding(28)
-        .frame(maxWidth: .infinity, minHeight: 360, alignment: .topLeading)
+        .padding(isCompact ? 14 : 28)
+        .frame(maxWidth: .infinity, minHeight: isCompact ? 218 : 360, alignment: .topLeading)
         .background(MonthlyStatsHeroBackground(backgroundURL: stats?.backgroundURL))
         .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
         .overlay {
@@ -170,11 +181,11 @@ private struct MonthlyStatsHeroView: View {
         HStack(alignment: .firstTextBaseline) {
             VStack(alignment: .leading, spacing: 6) {
                 Text(stats?.monthTitle ?? currentMonthTitle)
-                    .font(.system(size: 15, weight: .semibold))
+                    .font(.system(size: isCompact ? 13 : 15, weight: .semibold))
                     .foregroundStyle(.secondary)
 
                 Text("本月观影")
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: isCompact ? 24 : 34, weight: .bold))
                     .foregroundStyle(.primary)
             }
 
@@ -183,38 +194,53 @@ private struct MonthlyStatsHeroView: View {
     }
 
     private func statsContent(_ stats: MonthlyWatchStats) -> some View {
-        VStack(alignment: .leading, spacing: 24) {
-            HStack(alignment: .top, spacing: 28) {
-                MonthlyMetricView(title: "总观看", value: "\(stats.totalCount)", unit: "次")
-                MonthlyMetricView(title: "电影", value: "\(stats.movieCount)", unit: "部")
-                MonthlyMetricView(title: "剧集", value: "\(stats.episodeCount)", unit: "集")
-                MonthlyMetricView(title: "观看天数", value: "\(stats.watchedDays)", unit: "天")
+        VStack(alignment: .leading, spacing: isCompact ? 14 : 24) {
+            LazyVGrid(
+                columns: Array(repeating: GridItem(.flexible(), spacing: isCompact ? 10 : 14), count: isCompact ? 2 : 4),
+                alignment: .leading,
+                spacing: isCompact ? 10 : 16
+            ) {
+                MonthlyMetricView(title: L10n.string("总观看"), value: "\(stats.totalCount)", unit: L10n.string("次"))
+                MonthlyMetricView(title: L10n.string("电影"), value: "\(stats.movieCount)", unit: L10n.string("部"))
+                MonthlyMetricView(title: L10n.string("剧集"), value: "\(stats.episodeCount)", unit: L10n.string("集"))
+                MonthlyMetricView(title: L10n.string("观看天数"), value: "\(stats.watchedDays)", unit: L10n.string("天"))
             }
 
             Divider().opacity(0.45)
 
-            HStack(alignment: .top, spacing: 32) {
-                VStack(alignment: .leading, spacing: 10) {
-                    MonthlyInsightRow(icon: "clock", title: "估算时长", value: stats.estimatedHoursText)
+            if isCompact {
+                HStack(alignment: .top, spacing: 12) {
+                    MonthlyInsightRow(icon: "clock", title: L10n.string("估算时长"), value: stats.estimatedHoursText)
                     MonthlyInsightRow(
                         icon: "flame",
-                        title: "最活跃",
-                        value: stats.busiestDay.map { "\($0) · \(stats.busiestDayCount) 次" } ?? "暂无"
+                        title: L10n.string("最活跃"),
+                        value: stats.busiestDay.map { L10n.string("%@ · %d 次", $0, stats.busiestDayCount) } ?? L10n.string("暂无")
                     )
                 }
-                .frame(width: 220, alignment: .leading)
-
-                if !stats.recentItems.isEmpty {
-                    VStack(alignment: .leading, spacing: 12) {
-                        Text("最近观看")
-                            .font(.system(size: 14, weight: .semibold))
-                            .foregroundStyle(.secondary)
-
-                        ForEach(stats.recentItems) { item in
-                            MonthlyRecentWatchRow(item: item)
-                        }
+            } else {
+                HStack(alignment: .top, spacing: 32) {
+                    VStack(alignment: .leading, spacing: 10) {
+                        MonthlyInsightRow(icon: "clock", title: L10n.string("估算时长"), value: stats.estimatedHoursText)
+                        MonthlyInsightRow(
+                            icon: "flame",
+                            title: L10n.string("最活跃"),
+                            value: stats.busiestDay.map { L10n.string("%@ · %d 次", $0, stats.busiestDayCount) } ?? L10n.string("暂无")
+                        )
                     }
-                    .frame(maxWidth: .infinity, alignment: .leading)
+                    .frame(width: 220, alignment: .leading)
+
+                    if !stats.recentItems.isEmpty {
+                        VStack(alignment: .leading, spacing: 12) {
+                            Text("最近观看")
+                                .font(.system(size: 14, weight: .semibold))
+                                .foregroundStyle(.secondary)
+
+                            ForEach(stats.recentItems) { item in
+                                MonthlyRecentWatchRow(item: item)
+                            }
+                        }
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                    }
                 }
             }
         }
@@ -254,8 +280,8 @@ private struct MonthlyStatsHeroView: View {
 
     private var currentMonthTitle: String {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
         return formatter.string(from: Date())
     }
 }
@@ -334,18 +360,23 @@ private struct MonthlyMetricView: View {
     let title: String
     let value: String
     let unit: String
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 5) {
+        VStack(alignment: .leading, spacing: isCompact ? 3 : 5) {
             Text(title)
-                .font(.system(size: 13, weight: .medium))
+                .font(.system(size: isCompact ? 12 : 13, weight: .medium))
                 .foregroundStyle(.secondary)
 
             HStack(alignment: .firstTextBaseline, spacing: 4) {
                 Text(value)
-                    .font(.system(size: 34, weight: .bold))
+                    .font(.system(size: isCompact ? 28 : 34, weight: .bold))
                 Text(unit)
-                    .font(.system(size: 13, weight: .semibold))
+                    .font(.system(size: isCompact ? 12 : 13, weight: .semibold))
                     .foregroundStyle(.secondary)
             }
         }
@@ -357,23 +388,31 @@ private struct MonthlyInsightRow: View {
     let icon: String
     let title: String
     let value: String
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        HStack(spacing: 10) {
+        HStack(spacing: isCompact ? 7 : 10) {
             Image(systemName: icon)
-                .font(.system(size: 14, weight: .semibold))
+                .font(.system(size: isCompact ? 12 : 14, weight: .semibold))
                 .foregroundStyle(.orange)
-                .frame(width: 18)
+                .frame(width: isCompact ? 14 : 18)
 
             VStack(alignment: .leading, spacing: 2) {
                 Text(title)
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: isCompact ? 11 : 12, weight: .medium))
                     .foregroundStyle(.secondary)
                 Text(value)
-                    .font(.system(size: 14, weight: .semibold))
+                    .font(.system(size: isCompact ? 12 : 14, weight: .semibold))
                     .foregroundStyle(.primary)
+                    .lineLimit(1)
+                    .minimumScaleFactor(0.78)
             }
         }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }
 
@@ -409,16 +448,21 @@ private struct HomeRailPlaceholderView: View {
     var leadingBleed: CGFloat = 0
     var trailingInset: CGFloat = 0
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: isCompact ? 10 : 14) {
             HStack(spacing: 8) {
                 Image(systemName: icon)
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
                     .foregroundStyle(iconColor.opacity(0.8))
 
                 Text(title)
-                    .font(.system(size: 20, weight: .bold))
+                    .font(.system(size: isCompact ? 18 : 20, weight: .bold))
 
                 Spacer()
             }
@@ -426,7 +470,7 @@ private struct HomeRailPlaceholderView: View {
             .padding(.trailing, trailingInset)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 20) {
+                LazyHStack(spacing: isCompact ? 12 : 20) {
                     ForEach(0..<8, id: \.self) { index in
                         HomePosterPlaceholder(index: index)
                     }
@@ -438,13 +482,22 @@ private struct HomeRailPlaceholderView: View {
             .scrollClipDisabled()
             .allowsHitTesting(false)
         }
-        .accessibilityLabel("\(title)正在加载")
+        .accessibilityLabel(L10n.string("%@ 正在加载", title))
     }
 }
 
 private struct HomePosterPlaceholder: View {
     let index: Int
     @Environment(\.colorScheme) private var colorScheme
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var posterWidth: CGFloat {
+        isCompact ? 104 : 150
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 8) {
@@ -465,17 +518,17 @@ private struct HomePosterPlaceholder: View {
                         endPoint: .bottomTrailing
                     )
                 }
-                .frame(width: 150, height: 225)
+                .frame(width: posterWidth, height: posterWidth * 1.5)
 
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(placeholderFill)
-                .frame(width: CGFloat(116 - (index % 3) * 18), height: 13)
+                .frame(width: min(posterWidth, CGFloat(116 - (index % 3) * 18)), height: isCompact ? 10 : 13)
 
             RoundedRectangle(cornerRadius: 3, style: .continuous)
                 .fill(placeholderFill.opacity(0.72))
-                .frame(width: CGFloat(62 + (index % 2) * 16), height: 11)
+                .frame(width: CGFloat(62 + (index % 2) * 16), height: isCompact ? 9 : 11)
         }
-        .frame(width: 150, alignment: .leading)
+        .frame(width: posterWidth, alignment: .leading)
     }
 
     private var placeholderFill: Color {
@@ -492,16 +545,21 @@ private struct ContinueWatchingRail: View {
     var leadingInset: CGFloat = 0
     var leadingBleed: CGFloat = 0
     var trailingInset: CGFloat = 0
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
-        VStack(alignment: .leading, spacing: 14) {
+        VStack(alignment: .leading, spacing: isCompact ? 10 : 14) {
             HStack(spacing: 8) {
                 Image(systemName: "play.circle.fill")
-                    .font(.system(size: 16, weight: .semibold))
+                    .font(.system(size: isCompact ? 14 : 16, weight: .semibold))
                     .foregroundStyle(.orange)
 
-                Text("继续观看")
-                    .font(.system(size: 20, weight: .bold))
+                Text(L10n.string("继续观看"))
+                    .font(.system(size: isCompact ? 18 : 20, weight: .bold))
 
                 Spacer()
             }
@@ -509,7 +567,7 @@ private struct ContinueWatchingRail: View {
             .padding(.trailing, trailingInset)
 
             ScrollView(.horizontal, showsIndicators: false) {
-                LazyHStack(spacing: 16) {
+                LazyHStack(spacing: isCompact ? 12 : 16) {
                     ForEach(items) { item in
                         ContinueWatchingCard(item: item)
                     }
@@ -528,6 +586,15 @@ private struct ContinueWatchingCard: View {
     @State private var showTranslation: TranslationResult?
     @State private var isHovered = false
     @Environment(AppState.self) private var appState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var posterWidth: CGFloat {
+        isCompact ? 118 : 160
+    }
 
     var body: some View {
         Button {
@@ -542,8 +609,8 @@ private struct ContinueWatchingCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Poster with episode overlay
                 ZStack(alignment: .bottomLeading) {
-                    AsyncPosterImage(urlString: item.show.images?.poster?.first)
-                        .frame(width: 160, height: 240)
+                    AsyncPosterImage(urlString: item.posterURL)
+                        .frame(width: posterWidth, height: posterWidth * 1.5)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
 
                     // Gradient overlay
@@ -557,28 +624,28 @@ private struct ContinueWatchingCard: View {
                     // Episode info
                     VStack(alignment: .leading, spacing: 4) {
                         Text("S\(item.nextEpisode.season)E\(item.nextEpisode.number)")
-                            .font(.system(size: 11, weight: .bold))
+                            .font(.system(size: isCompact ? 10 : 11, weight: .bold))
                             .foregroundStyle(.white.opacity(0.9))
                         Text(item.nextEpisode.title ?? "")
-                            .font(.system(size: 12))
+                            .font(.system(size: isCompact ? 11 : 12))
                             .foregroundStyle(.white.opacity(0.8))
                             .lineLimit(1)
                     }
-                    .padding(10)
+                    .padding(isCompact ? 8 : 10)
                 }
-                .frame(width: 160, height: 240)
+                .frame(width: posterWidth, height: posterWidth * 1.5)
 
                 // Show title
                 Text(showTranslation?.title ?? item.show.title)
-                    .font(.system(size: 13, weight: .medium))
+                    .font(.system(size: isCompact ? 12 : 13, weight: .medium))
                     .lineLimit(1)
                     .foregroundStyle(.primary)
-                    .frame(width: 160, alignment: .leading)
+                    .frame(width: posterWidth, alignment: .leading)
 
                 // Progress bar
                 ProgressView(value: Double(item.displayCompletedEpisodes), total: Double(item.displayAiredEpisodes))
                     .tint(.blue)
-                    .frame(width: 160)
+                    .frame(width: posterWidth)
             }
             .contentShape(Rectangle())
             .scaleEffect(isHovered ? 1.03 : 1.0)

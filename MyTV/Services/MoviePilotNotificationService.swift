@@ -1,10 +1,16 @@
 import Foundation
 import UserNotifications
+#if os(iOS)
+import BackgroundTasks
+#endif
 
 @Observable
 @MainActor
 final class MoviePilotNotificationService {
     static let shared = MoviePilotNotificationService()
+#if os(iOS)
+    static let backgroundRefreshTaskIdentifier = "com.mytv.app.ios.moviepilot.refresh"
+#endif
 
     private var pollingTask: Task<Void, Never>?
 
@@ -17,17 +23,17 @@ final class MoviePilotNotificationService {
     var authorizationStatusText: String {
         switch authorizationStatus {
         case .notDetermined:
-            return "未请求"
+            return L10n.string("未请求")
         case .denied:
-            return "已拒绝"
+            return L10n.string("已拒绝")
         case .authorized:
-            return "已允许"
+            return L10n.string("已允许")
         case .provisional:
-            return "临时允许"
+            return L10n.string("临时允许")
         case .ephemeral:
-            return "临时会话"
+            return L10n.string("临时会话")
         @unknown default:
-            return "未知"
+            return L10n.string("未知")
         }
     }
 
@@ -35,6 +41,9 @@ final class MoviePilotNotificationService {
         Task {
             await refreshAuthorizationStatus()
             restartIfNeeded()
+#if os(iOS)
+            scheduleBackgroundRefreshIfNeeded()
+#endif
         }
     }
 
@@ -69,6 +78,9 @@ final class MoviePilotNotificationService {
             await self?.pollLoop()
         }
         isPolling = true
+#if os(iOS)
+        scheduleBackgroundRefreshIfNeeded()
+#endif
     }
 
     func stop() {
@@ -132,8 +144,8 @@ final class MoviePilotNotificationService {
 
     private func postNotification(for message: MoviePilotMessage) async {
         let content = UNMutableNotificationContent()
-        content.title = nonEmpty(message.title) ?? "MoviePilot"
-        content.body = nonEmpty(message.text) ?? "MoviePilot 有新的消息"
+        content.title = nonEmpty(message.title) ?? L10n.string("媒体助手")
+        content.body = nonEmpty(message.text) ?? L10n.string("媒体助手有新的消息")
         content.sound = .default
 
         let request = UNNotificationRequest(
@@ -154,3 +166,31 @@ final class MoviePilotNotificationService {
         return trimmed?.isEmpty == false ? trimmed : nil
     }
 }
+
+#if os(iOS)
+extension MoviePilotNotificationService {
+    func scheduleBackgroundRefreshIfNeeded() {
+        guard MoviePilotSettingsStore.notificationsEnabled() else { return }
+
+        let request = BGAppRefreshTaskRequest(identifier: Self.backgroundRefreshTaskIdentifier)
+        request.earliestBeginDate = Date(timeIntervalSinceNow: 15 * 60)
+
+        do {
+            try BGTaskScheduler.shared.submit(request)
+        } catch {
+            lastErrorMessage = error.localizedDescription
+        }
+    }
+
+    func performBackgroundRefresh() async {
+        await refreshAuthorizationStatus()
+        guard MoviePilotSettingsStore.notificationsEnabled(),
+              authorizationStatus == .authorized || authorizationStatus == .provisional else {
+            return
+        }
+
+        await pollOnce()
+        scheduleBackgroundRefreshIfNeeded()
+    }
+}
+#endif

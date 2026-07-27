@@ -6,6 +6,20 @@ struct ShowDetailView: View {
     @State private var listActionViewModel = MediaListActionViewModel()
     @State private var moviePilotViewModel = MoviePilotMediaViewModel()
     @Environment(AppState.self) private var appState
+    @Environment(\.scenePhase) private var scenePhase
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var heroHeight: CGFloat {
+        isCompact ? 360 : (AdaptiveLayout.runsOnIOS ? 360 : 420)
+    }
+
+    private var heroTopPadding: CGFloat {
+        isCompact ? 110 : (AdaptiveLayout.runsOnIOS ? 88 : 120)
+    }
 
     var body: some View {
         Group {
@@ -13,15 +27,15 @@ struct ShowDetailView: View {
                 let moviePilotTarget = MoviePilotMediaTarget.show(show)
                 ScrollView {
                     VStack(spacing: 0) {
-                        showHero(show: show, translation: viewModel.translation, seasons: viewModel.seasons)
+                        showHero(show: show, translation: viewModel.translation, seasons: viewModel.seasons, detailViewModel: viewModel)
 
-                        HStack(alignment: .top, spacing: 22) {
+                        AdaptiveDetailColumns {
                             VStack(alignment: .leading, spacing: 18) {
                                 if let overview = viewModel.translation?.overview ?? show.overview {
                                     DetailSectionCard(title: "简介") {
                                         Text(overview)
-                                            .font(.system(size: 15))
-                                            .lineSpacing(5)
+                                            .font(.system(size: isCompact ? 14 : 15))
+                                            .lineSpacing(isCompact ? 4 : 5)
                                             .foregroundStyle(.secondary)
                                     }
                                 }
@@ -35,8 +49,13 @@ struct ShowDetailView: View {
                                 if !viewModel.seasons.isEmpty {
                                     DetailSectionCard(title: "季度") {
                                         LazyVGrid(
-                                            columns: [GridItem(.adaptive(minimum: 220), spacing: 12)],
-                                            spacing: 12
+                                            columns: [
+                                                GridItem(
+                                                    .adaptive(minimum: isCompact ? 148 : 220),
+                                                    spacing: isCompact ? 10 : 12
+                                                )
+                                            ],
+                                            spacing: isCompact ? 10 : 12
                                         ) {
                                             ForEach(viewModel.seasons, id: \.number) { season in
                                                 SeasonCard(season: season, showId: showId)
@@ -70,42 +89,44 @@ struct ShowDetailView: View {
 
                                 commentsSection(viewModel: viewModel)
                             }
-
-                            VStack(spacing: 12) {
-                                MoviePilotStatusPanel(
-                                    target: moviePilotTarget,
-                                    viewModel: moviePilotViewModel,
-                                    onConfigure: navigateToSettings
-                                )
-
-                                if let rating = show.rating {
-                                    DetailStatTile(
-                                        title: "Trakt 评分",
-                                        value: String(format: "%.1f", rating),
-                                        icon: "star.fill",
-                                        tint: .yellow
+                        } sidebar: {
+                            VStack(spacing: isCompact ? 10 : 12) {
+                                if appState.isMediaAssistantConfigured {
+                                    MoviePilotStatusPanel(
+                                        target: moviePilotTarget,
+                                        viewModel: moviePilotViewModel,
+                                        onConfigure: navigateToSettings
                                     )
                                 }
 
-                                DetailStatTile(title: "年份", value: "\(show.year)", icon: "calendar")
+                                DetailStatGrid {
+                                    if let rating = show.rating {
+                                        DetailStatTile(
+                                            title: "Trakt 评分",
+                                            value: String(format: "%.1f", rating),
+                                            icon: "star.fill",
+                                            tint: .yellow
+                                        )
+                                    }
 
-                                if !viewModel.seasons.isEmpty {
-                                    DetailStatTile(title: "季数", value: "\(viewModel.seasons.count)", icon: "rectangle.stack.fill")
-                                }
+                                    DetailStatTile(title: "年份", value: "\(show.year)", icon: "calendar")
 
-                                if let episodes = show.airedEpisodes {
-                                    DetailStatTile(title: "集数", value: "\(episodes)", icon: "play.rectangle.fill")
+                                    if !viewModel.seasons.isEmpty {
+                                        DetailStatTile(title: "季数", value: "\(viewModel.seasons.count)", icon: "rectangle.stack.fill")
+                                    }
+
+                                    if let episodes = show.airedEpisodes {
+                                        DetailStatTile(title: "集数", value: "\(episodes)", icon: "play.rectangle.fill")
+                                    }
                                 }
                             }
-                            .frame(width: 220)
                         }
-                        .padding(.horizontal, 28)
-                        .padding(.top, 24)
-                        .padding(.bottom, 40)
                     }
+                    .frame(maxWidth: .infinity, alignment: .top)
                 }
                 .background(DetailBackgroundClearer())
-                .ignoresSafeArea(.container, edges: .top)
+                .detailTopSafeAreaBleed(isCompact)
+                .detailNavigationBarBackgroundHidden(isCompact)
             } else {
                 ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
             }
@@ -116,72 +137,158 @@ struct ShowDetailView: View {
             self.viewModel = vm
             await vm.load()
         }
+        .onChange(of: scenePhase) { _, phase in
+            guard phase == .active, let viewModel else { return }
+            Task { await viewModel.refreshWatchedStatus() }
+        }
     }
 
-    private func showHero(show: ShowDetailsDTO, translation: TranslationResult?, seasons: [SeasonDTO]) -> some View {
+    private func showHero(
+        show: ShowDetailsDTO,
+        translation: TranslationResult?,
+        seasons: [SeasonDTO],
+        detailViewModel: ShowDetailViewModel
+    ) -> some View {
         let title = translation?.title ?? show.title
         let backdropURL = show.images?.fanart?.first ?? show.images?.poster?.first
         let moviePilotTarget = MoviePilotMediaTarget.show(show)
+        let firstAiredDate = DetailWatchedDateFormatter.parse(show.firstAired)
 
         return ZStack(alignment: .bottomLeading) {
-            DetailHeroArtworkView(urlString: backdropURL, height: 420, dimming: 0.18)
+            DetailHeroArtworkView(urlString: backdropURL, height: heroHeight, dimming: 0.18)
 
-            HStack(alignment: .bottom, spacing: 24) {
-                AsyncPosterImage(urlString: show.images?.poster?.first)
-                    .frame(width: 170, height: 255)
-                    .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-                    .shadow(color: .black.opacity(0.38), radius: 18, y: 10)
-
-                VStack(alignment: .leading, spacing: 14) {
-                    Text(title)
-                        .font(.system(size: 42, weight: .bold))
-                        .foregroundStyle(.white)
-                        .lineLimit(2)
-                        .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
-
-                    if let network = show.network {
-                        Text(network)
-                            .font(.system(size: 16, weight: .medium))
-                            .foregroundStyle(.white.opacity(0.78))
-                            .lineLimit(1)
-                    }
-
-                    HStack(spacing: 8) {
-                        DetailMetaChip(text: "\(show.year)", icon: "calendar", tint: .white.opacity(0.86))
-                        if let status = show.status {
-                            DetailMetaChip(text: status, icon: "dot.radiowaves.left.and.right", tint: .white.opacity(0.86))
-                        }
-                        if let runtime = show.runtime {
-                            DetailMetaChip(text: "\(runtime) 分钟/集", icon: "clock", tint: .white.opacity(0.86))
-                        }
-                        if let rating = show.rating {
-                            DetailMetaChip(
-                                text: String(format: "%.1f", rating),
-                                icon: "star.fill",
-                                tint: .yellow
-                            )
-                        }
-                    }
-
-                    HStack(spacing: 10) {
-                        MediaListActionMenu(
-                            target: .show(show.ids.trakt),
-                            viewModel: listActionViewModel
-                        )
-
-                        MoviePilotSubscribeButton(
-                            target: moviePilotTarget,
+            Group {
+                if isCompact {
+                    heroText(
+                        show: show,
+                        title: title,
+                        network: show.network,
+                        seasons: seasons,
+                        moviePilotTarget: moviePilotTarget,
+                        firstAiredDate: firstAiredDate,
+                        detailViewModel: detailViewModel,
+                        titleSize: 23
+                    )
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                } else {
+                    HStack(alignment: .bottom, spacing: 24) {
+                        heroPoster(urlString: show.images?.poster?.first, width: 170)
+                        heroText(
+                            show: show,
+                            title: title,
+                            network: show.network,
                             seasons: seasons,
-                            viewModel: moviePilotViewModel,
-                            onConfigure: navigateToSettings
+                            moviePilotTarget: moviePilotTarget,
+                            firstAiredDate: firstAiredDate,
+                            detailViewModel: detailViewModel,
+                            titleSize: 42
                         )
+                            .frame(maxWidth: 720, alignment: .leading)
                     }
                 }
-                .frame(maxWidth: 720, alignment: .leading)
             }
-            .padding(.horizontal, 32)
-            .padding(.bottom, 28)
-            .padding(.top, 120)
+            .padding(.horizontal, isCompact ? 16 : 32)
+            .padding(.bottom, isCompact ? 18 : 28)
+            .padding(.top, heroTopPadding)
+        }
+    }
+
+    private func heroPoster(urlString: String?, width: CGFloat) -> some View {
+        AsyncPosterImage(urlString: urlString)
+            .frame(width: width, height: width * 1.5)
+            .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            .shadow(color: .black.opacity(0.38), radius: isCompact ? 10 : 18, y: isCompact ? 6 : 10)
+    }
+
+    private func heroText(
+        show: ShowDetailsDTO,
+        title: String,
+        network: String?,
+        seasons: [SeasonDTO],
+        moviePilotTarget: MoviePilotMediaTarget,
+        firstAiredDate: Date?,
+        detailViewModel: ShowDetailViewModel,
+        titleSize: CGFloat
+    ) -> some View {
+        VStack(alignment: .leading, spacing: isCompact ? 9 : 14) {
+            Text(title)
+                .font(.system(size: titleSize, weight: .bold))
+                .foregroundStyle(.white)
+                .lineLimit(isCompact ? 3 : 2)
+                .minimumScaleFactor(0.82)
+                .fixedSize(horizontal: false, vertical: true)
+                .shadow(color: .black.opacity(0.35), radius: 8, y: 3)
+
+            if let network {
+                Text(network)
+                    .font(.system(size: isCompact ? 14 : 16, weight: .medium))
+                    .foregroundStyle(.white.opacity(0.78))
+                    .lineLimit(1)
+            }
+
+            FlowLayout(spacing: isCompact ? 6 : 8) {
+                DetailMetaChip(text: "\(show.year)", icon: "calendar", tint: .white.opacity(0.86))
+                if let status = show.status {
+                    DetailMetaChip(text: status, icon: "dot.radiowaves.left.and.right", tint: .white.opacity(0.86))
+                }
+                if let runtime = show.runtime {
+                    DetailMetaChip(text: "\(runtime) 分钟/集", icon: "clock", tint: .white.opacity(0.86))
+                }
+                if let rating = show.rating {
+                    DetailMetaChip(
+                        text: String(format: "%.1f", rating),
+                        icon: "star.fill",
+                        tint: .yellow
+                    )
+                }
+            }
+
+            DetailHeroActionGroup {
+                heroActions(
+                    show: show,
+                    seasons: seasons,
+                    moviePilotTarget: moviePilotTarget,
+                    firstAiredDate: firstAiredDate,
+                    detailViewModel: detailViewModel
+                )
+            }
+        }
+    }
+
+    @ViewBuilder
+    private func heroActions(
+        show: ShowDetailsDTO,
+        seasons: [SeasonDTO],
+        moviePilotTarget: MoviePilotMediaTarget,
+        firstAiredDate: Date?,
+        detailViewModel: ShowDetailViewModel
+    ) -> some View {
+        MediaListActionMenu(
+            target: .show(show.ids.trakt),
+            viewModel: listActionViewModel
+        )
+
+        DetailMarkWatchedButton(
+            title: detailViewModel.translation?.title ?? show.title,
+            releaseDate: firstAiredDate,
+            releaseDateLabel: L10n.string("首播日期"),
+            isSubmitting: detailViewModel.isMarkingWatched,
+            isCheckingStatus: detailViewModel.isLoadingWatchedStatus,
+            isWatched: detailViewModel.isWatched,
+            message: detailViewModel.watchedMessage,
+            errorMessage: detailViewModel.watchedErrorMessage,
+            onMark: { date in
+                await detailViewModel.markWatched(at: date)
+            }
+        )
+
+        if appState.isMediaAssistantConfigured {
+            MoviePilotSubscribeButton(
+                target: moviePilotTarget,
+                seasons: seasons,
+                viewModel: moviePilotViewModel,
+                onConfigure: navigateToSettings
+            )
         }
     }
 
@@ -205,23 +312,32 @@ private struct SeasonCard: View {
     let showId: Int
     @State private var isHovered = false
     @Environment(AppState.self) private var appState
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
+
+    private var posterWidth: CGFloat {
+        isCompact ? 44 : 56
+    }
 
     var body: some View {
         Button {
             appState.navigate(to: .seasonDetail(showId: showId, seasonNumber: season.number))
         } label: {
-            HStack(spacing: 12) {
+            HStack(spacing: isCompact ? 9 : 12) {
                 AsyncPosterImage(urlString: season.images?.poster?.first ?? season.images?.fanart?.first)
-                    .frame(width: 56, height: 78)
+                    .frame(width: posterWidth, height: posterWidth * 1.42)
                     .clipShape(RoundedRectangle(cornerRadius: 6, style: .continuous))
 
-                VStack(alignment: .leading, spacing: 6) {
+                VStack(alignment: .leading, spacing: isCompact ? 4 : 6) {
                     Text(season.title ?? "第 \(season.number) 季")
-                        .font(.system(size: 14, weight: .semibold))
+                        .font(.system(size: isCompact ? 13 : 14, weight: .semibold))
                         .foregroundStyle(.primary)
-                        .lineLimit(1)
+                        .lineLimit(isCompact ? 2 : 1)
 
-                    HStack(spacing: 8) {
+                    HStack(spacing: isCompact ? 6 : 8) {
                         if let episodeCount = season.episodeCount {
                             Text("\(episodeCount) 集")
                         }
@@ -230,8 +346,9 @@ private struct SeasonCard: View {
                                 .foregroundStyle(.yellow)
                         }
                     }
-                    .font(.system(size: 12, weight: .medium))
+                    .font(.system(size: isCompact ? 11 : 12, weight: .medium))
                     .foregroundStyle(.secondary)
+                    .lineLimit(1)
                 }
 
                 Spacer()
@@ -240,7 +357,7 @@ private struct SeasonCard: View {
                     .font(.caption)
                     .foregroundStyle(.tertiary)
             }
-            .padding(12)
+            .padding(isCompact ? 10 : 12)
             .frame(maxWidth: .infinity, alignment: .leading)
             .background {
                 RoundedRectangle(cornerRadius: 8, style: .continuous)

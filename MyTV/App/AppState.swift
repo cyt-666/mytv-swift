@@ -15,6 +15,21 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
 
     var id: String { rawValue }
 
+    var titleKey: LocalizedStringKey {
+        switch self {
+        case .home: return "首页"
+        case .movies: return "电影"
+        case .shows: return "电视剧"
+        case .browse: return "分类"
+        case .upNext: return "待看"
+        case .watchlist: return "观看清单"
+        case .history: return "观看历史"
+        case .collection: return "我的片库"
+        case .calendar: return "剧集日历"
+        case .moviePilot: return "媒体助手"
+        }
+    }
+
     var icon: String {
         switch self {
         case .home: return "house.fill"
@@ -39,6 +54,13 @@ enum SidebarSection: String, CaseIterable, Identifiable, Hashable {
 }
 
 enum Route: Hashable {
+    case movies
+    case shows
+    case browse
+    case upNext
+    case watchlist
+    case history
+    case collection
     case movieDetail(id: Int)
     case showDetail(id: Int)
     case seasonDetail(showId: Int, seasonNumber: Int)
@@ -49,24 +71,68 @@ enum Route: Hashable {
     case settings
 }
 
+@MainActor
+@Observable
+final class AppRouter {
+    var path: [Route] = []
+
+    func navigate(to route: Route) {
+        path.append(route)
+    }
+
+    func reset() {
+        path = []
+    }
+}
+
+@MainActor
 @Observable
 final class AppState {
     var selectedSection: SidebarSection? = .home
-    var navigationPath = NavigationPath()
+    var navigationPath: [Route] = []
     var searchQuery = ""
     var homeFanartURL: String?
+    var router: AppRouter?
+    var appLanguage: AppLanguage
+    var needsLanguageSelection: Bool
+    var isMediaAssistantConfigured = false
+
+    init() {
+        let storedLanguageCode = UserDefaults.standard.string(forKey: AppLanguageStorage.appLanguage)
+        appLanguage = storedLanguageCode.flatMap(AppLanguage.init(rawValue:)) ?? .preferredSystemLanguage
+        needsLanguageSelection = !UserDefaults.standard.bool(forKey: AppLanguageStorage.didChooseLanguage)
+    }
 
     func navigate(to route: Route) {
-        navigationPath.append(route)
+        if let router {
+            router.navigate(to: route)
+        } else {
+            navigationPath.append(route)
+        }
     }
 
     func navigateToSection(_ section: SidebarSection) {
-        navigationPath = NavigationPath()
+        navigationPath = []
+        router?.reset()
         selectedSection = section
+    }
+
+    func refreshMediaAssistantConfiguration() {
+        isMediaAssistantConfigured = MoviePilotSettingsStore.hasConnectionConfiguration()
+        if !isMediaAssistantConfigured, selectedSection == .moviePilot {
+            navigateToSection(.home)
+        }
     }
 
     func goBack() {
         guard !navigationPath.isEmpty else { return }
         navigationPath.removeLast()
+    }
+
+    func setAppLanguage(_ language: AppLanguage) {
+        appLanguage = language
+        needsLanguageSelection = false
+        UserDefaults.standard.set(language.rawValue, forKey: AppLanguageStorage.appLanguage)
+        UserDefaults.standard.set(true, forKey: AppLanguageStorage.didChooseLanguage)
     }
 }

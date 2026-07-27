@@ -14,18 +14,33 @@ enum AppConstants {
         buildNumber.isEmpty || buildNumber == "1" ? version : "\(version) (\(buildNumber))"
     }()
 
-    static let userAgent = "MyTV-macOS/\(version)"
+    static let userAgent: String = {
+        #if os(iOS)
+        return "MyTV-iOS/\(version)"
+        #else
+        return "MyTV-macOS/\(version)"
+        #endif
+    }()
+
+    static let platformDisplayName: String = {
+        #if os(iOS)
+        return "MyTV for iOS"
+        #else
+        return "MyTV for macOS"
+        #endif
+    }()
 
     // MARK: - Trakt API
     static let clientID: String = {
-        guard let value = Bundle.main.object(forInfoDictionaryKey: "TraktClientID") as? String,
-              !value.isEmpty,
-              !value.hasPrefix("$(")
-        else {
-            fatalError("Missing TRAKT_CLIENT_ID build setting. Pass TRAKT_CLIENT_ID=<client_id> when building.")
+        if let value = sanitizedClientID(Bundle.main.object(forInfoDictionaryKey: "TraktClientID") as? String) {
+            return value
         }
-        return value
+        if let value = sanitizedClientID(ProcessInfo.processInfo.environment["TRAKT_CLIENT_ID"]) {
+            return value
+        }
+        return ""
     }()
+    static var isTraktClientIDConfigured: Bool { !clientID.isEmpty }
     static let redirectURI = "mytv://oauth/callback"
     static let callbackScheme = "mytv"
     static let apiBaseURL = "https://api.trakt.tv"
@@ -47,6 +62,16 @@ enum AppConstants {
     static let translationTimeout: TimeInterval = 8
     static let translationPendingTimeout: TimeInterval = 5
     static let translationFailureCacheDuration: TimeInterval = 5 * 60
+
+    private static func sanitizedClientID(_ value: String?) -> String? {
+        guard let value,
+              !value.isEmpty,
+              !value.hasPrefix("$(")
+        else {
+            return nil
+        }
+        return value
+    }
 
     // MARK: - Window
     static let defaultWindowWidth: Double = 1200

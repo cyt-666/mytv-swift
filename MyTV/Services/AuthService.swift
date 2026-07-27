@@ -1,19 +1,32 @@
 import Foundation
 import SwiftData
 import AuthenticationServices
+#if os(macOS)
 import AppKit
+#elseif os(iOS)
+import UIKit
+#endif
 import CryptoKit
 
 enum AuthError: Error, LocalizedError {
+    case missingClientID
     case noCode
     case noRefreshToken
+    case noPresentationAnchor
+    case sessionDidNotStart
     case sessionFailed(Error)
 
     var errorDescription: String? {
         switch self {
-        case .noCode: return "未获取到授权码"
-        case .noRefreshToken: return "无刷新 Token"
-        case .sessionFailed(let err): return "认证失败: \(err.localizedDescription)"
+        case .missingClientID:
+            return L10n.string("缺少 Trakt Client ID。请在 Xcode 的 MyTViOS target build setting 或 Run 环境变量中设置 TRAKT_CLIENT_ID。")
+        case .noCode: return L10n.string("未获取到授权码")
+        case .noRefreshToken: return L10n.string("无刷新 Token")
+        case .noPresentationAnchor:
+            return L10n.string("登录窗口尚未准备好，请稍后重试")
+        case .sessionDidNotStart:
+            return L10n.string("无法启动 Trakt 登录会话")
+        case .sessionFailed(let err): return L10n.string("认证失败: %@", err.localizedDescription)
         }
     }
 }
@@ -29,15 +42,29 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
 
     private var modelContext: ModelContext?
     private var codeVerifier: String?
+    private nonisolated let presentationAnchorStore = PresentationAnchorStore()
 
     func configure(modelContext: ModelContext) {
         self.modelContext = modelContext
         loadPersistedToken()
     }
 
+    func updatePresentationAnchor(_ anchor: ASPresentationAnchor?) {
+        presentationAnchorStore.set(anchor)
+    }
+
     // MARK: - Login
 
     func login() async throws {
+        guard AppConstants.isTraktClientIDConfigured else {
+            throw AuthError.missingClientID
+        }
+        #if os(iOS)
+        guard presentationAnchorStore.get() != nil else {
+            throw AuthError.noPresentationAnchor
+        }
+        #endif
+
         let verifier = Self.generateCodeVerifier()
         self.codeVerifier = verifier
         let challenge = Self.codeChallenge(from: verifier)
@@ -99,19 +126,10 @@ final class AuthService: NSObject, ASWebAuthenticationPresentationContextProvidi
     // MARK: - ASWebAuthenticationPresentationContextProviding
 
     nonisolated func presentationAnchor(for session: ASWebAuthenticationSession) -> ASPresentationAnchor {
-        if Thread.isMainThread {
-            return Self.currentPresentationAnchor()
+        guard let anchor = presentationAnchorStore.get() else {
+            preconditionFailure("ASWebAuthenticationSession requested a presentation anchor before a window was registered.")
         }
-
-        return DispatchQueue.main.sync {
-            Self.currentPresentationAnchor()
-        }
-    }
-
-    private nonisolated static func currentPresentationAnchor() -> ASPresentationAnchor {
-        MainActor.assumeIsolated {
-            NSApplication.shared.mainWindow ?? NSApplication.shared.windows.first ?? NSWindow()
-        }
+        return anchor
     }
 
     // MARK: - PKCE
@@ -202,12 +220,32 @@ private func runAuthSession(
         session.presentationContextProvider = provider
         session.prefersEphemeralWebBrowserSession = false
         holder.session = session
-        session.start()
+        if !session.start() {
+            holder.session = nil
+            continuation.resume(throwing: AuthError.sessionDidNotStart)
+        }
     }
 }
 
 private final class SessionHolder: @unchecked Sendable {
     var session: ASWebAuthenticationSession?
+}
+
+private final class PresentationAnchorStore: @unchecked Sendable {
+    private let lock = NSLock()
+    private weak var anchor: ASPresentationAnchor?
+
+    func set(_ anchor: ASPresentationAnchor?) {
+        lock.lock()
+        self.anchor = anchor
+        lock.unlock()
+    }
+
+    func get() -> ASPresentationAnchor? {
+        lock.lock()
+        defer { lock.unlock() }
+        return anchor
+    }
 }
 
 // MARK: - Base64URL

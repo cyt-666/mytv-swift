@@ -114,7 +114,7 @@ final class HomeViewModel {
             recommendedShows = Array(cached.recommendedShows.prefix(10))
         }
         if upNextItems.isEmpty {
-            upNextItems = Array(cached.upNextItems.prefix(10))
+            upNextItems = Array(cached.upNextItems.filter { $0.hasDisplayImage }.prefix(10))
         }
         if startWatchingShows.isEmpty {
             startWatchingShows = Array(cached.startWatchingShows.prefix(10))
@@ -221,13 +221,13 @@ enum MonthlyWatchStatsService {
             }
 
         return MonthlyWatchStats(
-            monthTitle: monthFormatter.string(from: monthStart),
+            monthTitle: Self.monthFormatter().string(from: monthStart),
             totalCount: items.count,
             movieCount: items.filter { $0.type == "movie" }.count,
             episodeCount: items.filter { $0.type == "episode" }.count,
             watchedDays: watchedDays.count,
             estimatedMinutes: estimatedMinutes,
-            busiestDay: busiestDay.map { dayFormatter.string(from: $0.key) },
+            busiestDay: busiestDay.map { Self.dayFormatter().string(from: $0.key) },
             busiestDayCount: busiestDay?.value ?? 0,
             recentItems: sortedItems.prefix(3).map(makeRecentWatchItem),
             backgroundURL: sortedItems.lazy.compactMap(backgroundURL).first
@@ -256,20 +256,20 @@ enum MonthlyWatchStatsService {
         let posterURL: String?
 
         if item.type == "movie" {
-            title = item.movie?.title ?? "未知电影"
-            subtitle = "电影"
+            title = item.movie?.title ?? L10n.string("未知电影")
+            subtitle = L10n.string("电影")
             posterURL = item.movie?.images?.poster?.first
         } else if item.type == "episode" {
-            title = item.show?.title ?? item.episode?.title ?? "未知剧集"
+            title = item.show?.title ?? item.episode?.title ?? L10n.string("未知剧集")
             if let episode = item.episode {
                 let episodeTitle = episode.title.map { " · \($0)" } ?? ""
                 subtitle = "S\(episode.season)E\(episode.number)\(episodeTitle)"
             } else {
-                subtitle = "剧集"
+                subtitle = L10n.string("剧集")
             }
             posterURL = item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
         } else {
-            title = item.movie?.title ?? item.show?.title ?? item.episode?.title ?? "未知"
+            title = item.movie?.title ?? item.show?.title ?? item.episode?.title ?? L10n.string("未知")
             subtitle = item.type
             posterURL = item.movie?.images?.poster?.first ?? item.show?.images?.poster?.first ?? item.episode?.images?.poster?.first
         }
@@ -338,19 +338,19 @@ enum MonthlyWatchStatsService {
         return formatter
     }()
 
-    private static let monthFormatter: DateFormatter = {
+    nonisolated fileprivate static func monthFormatter() -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("yMMMM")
         return formatter
-    }()
+    }
 
-    private static let dayFormatter: DateFormatter = {
+    nonisolated fileprivate static func dayFormatter() -> DateFormatter {
         let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "M月d日"
+        formatter.locale = L10n.locale
+        formatter.setLocalizedDateFormatFromTemplate("MMMd")
         return formatter
-    }()
+    }
 }
 
 struct MonthlyWatchStats: Codable {
@@ -366,20 +366,17 @@ struct MonthlyWatchStats: Codable {
     let backgroundURL: String?
 
     var estimatedHoursText: String {
-        guard estimatedMinutes > 0 else { return "暂无" }
+        guard estimatedMinutes > 0 else { return L10n.string("暂无") }
         let hours = Double(estimatedMinutes) / 60
         if hours < 1 {
-            return "\(estimatedMinutes) 分钟"
+            return L10n.string("%d 分钟", estimatedMinutes)
         }
-        return String(format: "%.1f 小时", hours)
+        return L10n.string("%.1f 小时", hours)
     }
 
     static func empty(for date: Date) -> MonthlyWatchStats {
-        let formatter = DateFormatter()
-        formatter.locale = Locale(identifier: "zh_CN")
-        formatter.dateFormat = "yyyy年M月"
         return MonthlyWatchStats(
-            monthTitle: formatter.string(from: date),
+            monthTitle: MonthlyWatchStatsService.monthFormatter().string(from: date),
             totalCount: 0,
             movieCount: 0,
             episodeCount: 0,

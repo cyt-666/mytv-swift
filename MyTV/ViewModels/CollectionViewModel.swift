@@ -7,6 +7,7 @@ final class CollectionViewModel {
     private var movieItems: [MovieDTO] = []
     private var showItems: [ShowDTO] = []
     private var loadingMediaTypes = Set<String>()
+    private var hydratingShowIds = Set<Int>()
 
     var items: [MediaItem] {
         if mediaType == "movies" {
@@ -42,6 +43,29 @@ final class CollectionViewModel {
             }
         } catch {
             print("加载片库失败: \(error)")
+        }
+    }
+
+    func hydratePosterIfNeeded(for item: MediaItem) async {
+        guard case .show(let show) = item,
+              !show.hasPosterImage,
+              !hydratingShowIds.contains(show.ids.trakt) else {
+            return
+        }
+
+        hydratingShowIds.insert(show.ids.trakt)
+        defer { hydratingShowIds.remove(show.ids.trakt) }
+
+        do {
+            let details = try await ShowAPI.details(id: show.ids.trakt)
+            guard details.images?.bestPosterURL != nil,
+                  let index = showItems.firstIndex(where: { $0.ids.trakt == show.ids.trakt }),
+                  !showItems[index].hasPosterImage else {
+                return
+            }
+            showItems[index] = showItems[index].withImages(details.images)
+        } catch {
+            print("补齐片库剧集海报失败 \(show.ids.trakt): \(error)")
         }
     }
 }

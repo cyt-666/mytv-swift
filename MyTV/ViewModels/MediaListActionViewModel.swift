@@ -21,12 +21,12 @@ final class MediaListActionViewModel {
 
     var actionTitle: String {
         if isSubmitting {
-            return "处理中..."
+            return L10n.string("处理中...")
         }
         if isLoadingMembership {
-            return "检查中..."
+            return L10n.string("检查中...")
         }
-        return hasJoinedList ? "管理列表" : "加入列表"
+        return hasJoinedList ? L10n.string("管理列表") : L10n.string("加入列表")
     }
 
     var actionIcon: String {
@@ -90,13 +90,13 @@ final class MediaListActionViewModel {
 
     func addToWatchlist(_ target: MediaListTarget) async {
         guard isLoggedIn else {
-            errorMessage = "登录 Trakt 后才能加入观看清单"
+            errorMessage = L10n.string("登录 Trakt 后才能加入观看清单")
             return
         }
 
         let didUpdate = await submit(
-            successMessage: "\(target.successName)已加入观看清单",
-            alreadyMessage: "\(target.successName)已在观看清单中"
+            successMessage: L10n.string("%@已加入观看清单", target.successName),
+            alreadyMessage: L10n.string("%@已在观看清单中", target.successName)
         ) {
             switch target {
             case .movie(let id):
@@ -119,13 +119,13 @@ final class MediaListActionViewModel {
 
     func removeFromWatchlist(_ target: MediaListTarget) async {
         guard isLoggedIn else {
-            errorMessage = "登录 Trakt 后才能修改观看清单"
+            errorMessage = L10n.string("登录 Trakt 后才能修改观看清单")
             return
         }
 
         let didUpdate = await submit(
-            successMessage: "\(target.successName)已从观看清单移除",
-            notFoundMessage: "\(target.successName)已不在观看清单中"
+            successMessage: L10n.string("%@已从观看清单移除", target.successName),
+            notFoundMessage: L10n.string("%@已不在观看清单中", target.successName)
         ) {
             switch target {
             case .movie(let id):
@@ -148,13 +148,13 @@ final class MediaListActionViewModel {
 
     func add(_ target: MediaListTarget, to list: TraktListDTO) async {
         guard isLoggedIn else {
-            errorMessage = "登录 Trakt 后才能加入自定义列表"
+            errorMessage = L10n.string("登录 Trakt 后才能加入自定义列表")
             return
         }
 
         let didUpdate = await submit(
-            successMessage: "\(target.successName)已加入「\(list.name)」",
-            alreadyMessage: "\(target.successName)已在「\(list.name)」中"
+            successMessage: L10n.string("%@已加入「%@」", target.successName, list.name),
+            alreadyMessage: L10n.string("%@已在「%@」中", target.successName, list.name)
         ) {
             let username = try await currentUsername()
             _ = try await ListAPI.addToList(
@@ -172,13 +172,13 @@ final class MediaListActionViewModel {
 
     func remove(_ target: MediaListTarget, from list: TraktListDTO) async {
         guard isLoggedIn else {
-            errorMessage = "登录 Trakt 后才能修改自定义列表"
+            errorMessage = L10n.string("登录 Trakt 后才能修改自定义列表")
             return
         }
 
         let didUpdate = await submit(
-            successMessage: "\(target.successName)已从「\(list.name)」移除",
-            notFoundMessage: "\(target.successName)已不在「\(list.name)」中"
+            successMessage: L10n.string("%@已从「%@」移除", target.successName, list.name),
+            notFoundMessage: L10n.string("%@已不在「%@」中", target.successName, list.name)
         ) {
             let username = try await currentUsername()
             _ = try await ListAPI.removeFromList(
@@ -212,18 +212,18 @@ final class MediaListActionViewModel {
         allowComments: Bool
     ) async -> Bool {
         guard isLoggedIn else {
-            errorMessage = "登录 Trakt 后才能创建列表"
+            errorMessage = L10n.string("登录 Trakt 后才能创建列表")
             return false
         }
 
         let trimmedName = name.trimmingCharacters(in: .whitespacesAndNewlines)
         guard !trimmedName.isEmpty else {
-            errorMessage = "列表名称不能为空"
+            errorMessage = L10n.string("列表名称不能为空")
             return false
         }
 
         var createdListId: Int?
-        let didUpdate = await submit(successMessage: "\(target.successName)已加入「\(trimmedName)」") {
+        let didUpdate = await submit(successMessage: L10n.string("%@已加入「%@」", target.successName, trimmedName)) {
             let username = try await currentUsername()
             let newList = try await ListAPI.createList(
                 username: username,
@@ -345,13 +345,13 @@ final class MediaListActionViewModel {
         if let apiError = error as? APIError {
             switch apiError {
             case .unauthorized, .refreshTokenFailed:
-                return "登录状态已过期，请重新登录 Trakt"
+                return L10n.string("登录状态已过期，请重新登录 Trakt")
             case .httpError(let statusCode, _):
                 switch statusCode {
-                case 401: return "登录 Trakt 后才能修改列表"
-                case 404: return "没有找到这个列表或条目"
-                case 409: return "这个条目已经在列表里"
-                default: return "Trakt 返回错误 \(statusCode)"
+                case 401: return L10n.string("登录 Trakt 后才能修改列表")
+                case 404: return L10n.string("没有找到这个列表或条目")
+                case 409: return L10n.string("这个条目已经在列表里")
+                default: return L10n.string("Trakt 返回错误 %d", statusCode)
                 }
             default:
                 return apiError.localizedDescription

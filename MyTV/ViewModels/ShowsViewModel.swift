@@ -36,9 +36,9 @@ final class ShowsViewModel {
             items = newItems
             canLoadMore = newItems.count == pageSize
         } catch {
-            errorMessage = "加载剧集列表失败: \(error.localizedDescription)"
+            errorMessage = L10n.string("加载剧集列表失败: %@", error.localizedDescription)
             canLoadMore = false
-            print(errorMessage ?? "加载剧集列表失败")
+            print(errorMessage ?? L10n.string("加载剧集列表失败"))
         }
     }
 
@@ -56,8 +56,8 @@ final class ShowsViewModel {
             let appendedCount = appendUnique(newItems)
             canLoadMore = newItems.count == pageSize && appendedCount > 0
         } catch {
-            errorMessage = "加载更多剧集失败: \(error.localizedDescription)"
-            print(errorMessage ?? "加载更多剧集失败")
+            errorMessage = L10n.string("加载更多剧集失败: %@", error.localizedDescription)
+            print(errorMessage ?? L10n.string("加载更多剧集失败"))
         }
     }
 

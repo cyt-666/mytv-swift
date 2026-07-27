@@ -2,12 +2,22 @@ import SwiftUI
 
 struct WatchlistView: View {
     @State private var viewModel = WatchlistViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                if isCompact {
+                    sourcePicker
+                        .padding(.horizontal, 16)
+                }
+
                 filterBar
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, isCompact ? 16 : 20)
 
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
@@ -21,7 +31,7 @@ struct WatchlistView: View {
                         .padding(.top, 36)
                 } else {
                     MediaGridView(items: viewModel.items) { _ in }
-                        .padding(.horizontal, 20)
+                        .padding(.horizontal, isCompact ? 16 : 20)
                 }
             }
             .padding(.top, 24)
@@ -37,15 +47,10 @@ struct WatchlistView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("列表来源", selection: $viewModel.source) {
-                    ForEach(WatchlistViewModel.Source.allCases, id: \.self) { source in
-                        Text(source.title).tag(source)
-                    }
+                if !isCompact {
+                    sourcePicker
+                        .frame(width: 190)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.regular)
-                .labelsHidden()
-                .frame(width: 190)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -61,56 +66,78 @@ struct WatchlistView: View {
         }
     }
 
-    private var filterBar: some View {
-        HStack(spacing: 16) {
-            Menu {
-                Button {
-                    viewModel.mediaType = "movies"
-                } label: {
-                    Label("电影", systemImage: "film")
-                }
-
-                Button {
-                    viewModel.mediaType = "shows"
-                } label: {
-                    Label("剧集", systemImage: "tv")
-                }
-            } label: {
-                inlineMenuLabel(
-                    title: viewModel.mediaType == "movies" ? "电影" : "剧集",
-                    icon: viewModel.mediaType == "movies" ? "film" : "tv"
-                )
+    private var sourcePicker: some View {
+        Picker("列表来源", selection: $viewModel.source) {
+            ForEach(WatchlistViewModel.Source.allCases, id: \.self) { source in
+                Text(source.title).tag(source)
             }
-            .menuStyle(.button)
-            .buttonStyle(.plain)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
+    }
 
+    private var filterBar: some View {
+        HStack(spacing: isCompact ? 12 : 16) {
             if viewModel.source == .customList {
-                Menu {
-                    if viewModel.customLists.isEmpty {
-                        Text("暂无列表")
-                    } else {
-                        ForEach(viewModel.customLists) { list in
-                            Button {
-                                viewModel.selectedListId = list.ids.trakt
-                            } label: {
-                                Text(list.name)
-                            }
-                        }
-                    }
-                } label: {
-                    inlineMenuLabel(
-                        title: viewModel.customListTitle(for: viewModel.selectedListId),
-                        icon: "list.bullet.rectangle"
-                    )
+                customListMenu
+                if viewModel.selectedListId != nil, !viewModel.customLists.isEmpty {
+                    mediaTypeMenu
                 }
-                .menuStyle(.button)
-                .buttonStyle(.plain)
-                .disabled(viewModel.customLists.isEmpty)
+            } else {
+                mediaTypeMenu
             }
 
             Spacer()
         }
         .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private var mediaTypeMenu: some View {
+        Menu {
+            Button {
+                viewModel.mediaType = "movies"
+            } label: {
+                Label("电影", systemImage: "film")
+            }
+
+            Button {
+                viewModel.mediaType = "shows"
+            } label: {
+                Label("剧集", systemImage: "tv")
+            }
+        } label: {
+            inlineMenuLabel(
+                title: viewModel.mediaType == "movies" ? L10n.string("电影") : L10n.string("剧集"),
+                icon: viewModel.mediaType == "movies" ? "film" : "tv"
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+    }
+
+    private var customListMenu: some View {
+        Menu {
+            if viewModel.customLists.isEmpty {
+                Text("暂无列表")
+            } else {
+                ForEach(viewModel.customLists) { list in
+                    Button {
+                        viewModel.selectedListId = list.ids.trakt
+                    } label: {
+                        Text(list.name)
+                    }
+                }
+            }
+        } label: {
+            inlineMenuLabel(
+                title: viewModel.customListTitle(for: viewModel.selectedListId),
+                icon: "list.bullet.rectangle"
+            )
+        }
+        .menuStyle(.button)
+        .buttonStyle(.plain)
+        .disabled(viewModel.customLists.isEmpty)
     }
 
     private func inlineMenuLabel(title: String, icon: String) -> some View {

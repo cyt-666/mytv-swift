@@ -12,6 +12,11 @@ final class EpisodeDetailViewModel {
     var episode: EpisodeDTO?
     var translation: TranslationResult?
     var isLoading = false
+    var isMarkingWatched = false
+    var isLoadingWatchedStatus = false
+    var isWatched = false
+    var watchedMessage: String?
+    var watchedErrorMessage: String?
 
     init(showId: Int, seasonNumber: Int, episodeNumber: Int) {
         self.showId = showId
@@ -47,6 +52,7 @@ final class EpisodeDetailViewModel {
             print("加载剧集详情失败: \(error)")
         }
 
+        await refreshWatchedStatus()
         async let episodeTranslation = TranslationService.shared.getEpisodeTranslation(
             showId: showId, seasonNumber: seasonNumber, episodeNumber: episodeNumber
         )
@@ -54,6 +60,23 @@ final class EpisodeDetailViewModel {
         translation = await episodeTranslation
         showTranslation = await seriesTranslation
         await commentStore.loadComments()
+    }
+
+    func refreshWatchedStatus() async {
+        guard isLoggedIn else {
+            isWatched = false
+            return
+        }
+        guard let episodeId = episode?.ids.trakt else { return }
+
+        isLoadingWatchedStatus = true
+        defer { isLoadingWatchedStatus = false }
+
+        do {
+            isWatched = try await UserAPI.hasWatched(type: "episodes", id: episodeId)
+        } catch {
+            print("同步单集已看状态失败: \(error)")
+        }
     }
 
     func postComment() async {
@@ -88,5 +111,54 @@ final class EpisodeDetailViewModel {
             commentStore.commentErrorMessage = CommentAPI.message(for: error)
             print("发布单集评论失败: \(error)")
         }
+    }
+
+    func markWatched(at date: Date) async -> Bool {
+        guard isLoggedIn else {
+            watchedErrorMessage = L10n.string("登录 Trakt 后才能标记已看")
+            return false
+        }
+        guard let episodeId = episode?.ids.trakt else {
+            watchedErrorMessage = L10n.string("单集信息还没有加载完成")
+            return false
+        }
+
+        isMarkingWatched = true
+        watchedMessage = nil
+        watchedErrorMessage = nil
+        defer { isMarkingWatched = false }
+
+        do {
+            _ = try await SyncAPI.addToHistory(
+                episodes: [["trakt": episodeId]],
+                watchedAt: date
+            )
+            CacheService.invalidateWatchedData()
+            isWatched = true
+            watchedMessage = L10n.string("%@已标记为已看", messageTitle)
+            return true
+        } catch {
+            watchedErrorMessage = message(for: error)
+            print("标记单集已看失败: \(error)")
+            return false
+        }
+    }
+
+    private var messageTitle: String {
+        if let translated = translation?.title, !translated.isEmpty {
+            return translated
+        }
+        if let title = episode?.title, !title.isEmpty {
+            return title
+        }
+        return "S\(seasonNumber)E\(episodeNumber)"
+    }
+
+    private func message(for error: Error) -> String {
+        if let localizedError = error as? LocalizedError,
+           let description = localizedError.errorDescription {
+            return description
+        }
+        return error.localizedDescription
     }
 }

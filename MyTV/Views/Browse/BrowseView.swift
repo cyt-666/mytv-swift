@@ -2,10 +2,20 @@ import SwiftUI
 
 struct BrowseView: View {
     @State private var viewModel = BrowseViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
+                if isCompact {
+                    filterControls
+                        .padding(.horizontal, 16)
+                }
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -34,7 +44,7 @@ struct BrowseView: View {
                             Task { await viewModel.loadMoreIfNeeded(currentItem: movie) }
                         }
                     )
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, isCompact ? 16 : 20)
 
                     PaginationFooterView(
                         isLoadingMore: viewModel.isLoadingMore,
@@ -53,24 +63,8 @@ struct BrowseView: View {
         .onChange(of: viewModel.selectedCountry) { _, _ in Task { await viewModel.load(reset: true) } }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                HStack(spacing: 8) {
-                    Picker("类型", selection: $viewModel.selectedGenre) {
-                        Text("全部类型").tag("")
-                        ForEach(viewModel.genres) { genre in
-                            Text(genre.title).tag(genre.value)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .controlSize(.regular)
-
-                    Picker("国家", selection: $viewModel.selectedCountry) {
-                        Text("全部国家").tag("")
-                        ForEach(viewModel.countries) { country in
-                            Text(country.title).tag(country.value)
-                        }
-                    }
-                    .pickerStyle(.menu)
-                    .controlSize(.regular)
+                if !isCompact {
+                    filterControls
                 }
             }
 
@@ -82,8 +76,33 @@ struct BrowseView: View {
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
                 }
                 .disabled(viewModel.isLoading || viewModel.isLoadingMore)
-                .help("刷新")
+                .help(L10n.string("刷新"))
             }
         }
+    }
+
+    private var filterControls: some View {
+        HStack(spacing: 8) {
+            Picker("类型", selection: $viewModel.selectedGenre) {
+                Text("全部类型").tag("")
+                ForEach(viewModel.genres) { genre in
+                    Text(genre.localizedTitle).tag(genre.value)
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.regular)
+
+            Picker("国家", selection: $viewModel.selectedCountry) {
+                Text("全部国家").tag("")
+                ForEach(viewModel.countries) { country in
+                    Text(country.localizedTitle).tag(country.value)
+                }
+            }
+            .pickerStyle(.menu)
+            .controlSize(.regular)
+
+            Spacer(minLength: 0)
+        }
+        .frame(maxWidth: .infinity, alignment: .leading)
     }
 }

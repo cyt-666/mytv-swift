@@ -2,10 +2,20 @@ import SwiftUI
 
 struct MoviesView: View {
     @State private var viewModel = MoviesViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 24) {
+                if isCompact {
+                    categoryPicker
+                        .padding(.horizontal, 16)
+                }
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -27,7 +37,7 @@ struct MoviesView: View {
                             Task { await viewModel.loadMoreIfNeeded(currentItem: movie) }
                         }
                     )
-                    .padding(.horizontal, 20)
+                    .padding(.horizontal, isCompact ? 16 : 20)
 
                     PaginationFooterView(
                         isLoadingMore: viewModel.isLoadingMore,
@@ -47,15 +57,10 @@ struct MoviesView: View {
         }
         .toolbar {
             ToolbarItem(placement: .principal) {
-                Picker("电影分类", selection: $viewModel.selectedTab) {
-                    Text("热门").tag(MoviesViewModel.Tab.trending)
-                    Text("流行").tag(MoviesViewModel.Tab.popular)
-                    Text("即将上映").tag(MoviesViewModel.Tab.anticipated)
+                if !isCompact {
+                    categoryPicker
+                        .frame(width: 270)
                 }
-                .pickerStyle(.segmented)
-                .controlSize(.regular)
-                .labelsHidden()
-                .frame(width: 270)
             }
 
             ToolbarItem(placement: .primaryAction) {
@@ -69,5 +74,16 @@ struct MoviesView: View {
                 .help("刷新")
             }
         }
+    }
+
+    private var categoryPicker: some View {
+        Picker("电影分类", selection: $viewModel.selectedTab) {
+            Text("热门").tag(MoviesViewModel.Tab.trending)
+            Text("流行").tag(MoviesViewModel.Tab.popular)
+            Text("即将上映").tag(MoviesViewModel.Tab.anticipated)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
     }
 }
