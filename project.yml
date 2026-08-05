@@ -42,7 +42,6 @@ targets:
       properties:
         com.apple.security.app-sandbox: true
         com.apple.security.network.client: true
-
   MyTViOS:
     type: application
     platform: iOS
@@ -97,3 +96,21 @@ targets:
         CODE_SIGN_STYLE: Automatic
         INFOPLIST_FILE: MyTV/iOS/Info.plist
         ASSETCATALOG_COMPILER_APPICON_NAME: AppIcon
+
+  MyTVTests:
+    type: bundle.unit-test
+    platform: macOS
+    configFiles:
+      Debug: MyTV/Config/MyTV.xcconfig
+      Release: MyTV/Config/MyTV.xcconfig
+    sources:
+      - MyTVTests
+    dependencies:
+      - target: MyTV
+    settings:
+      base:
+        SWIFT_VERSION: "6.0"
+        MACOSX_DEPLOYMENT_TARGET: "15.0"
+        GENERATE_INFOPLIST_FILE: YES
+        TEST_HOST: "$(BUILT_PRODUCTS_DIR)/MyTV.app/Contents/MacOS/MyTV"
+        BUNDLE_LOADER: "$(TEST_HOST)"

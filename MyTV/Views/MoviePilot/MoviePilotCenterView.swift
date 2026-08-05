@@ -7,6 +7,7 @@ struct MoviePilotCenterView: View {
     @State private var selectedSubscriptionKind = MoviePilotSubscriptionKind.movie
     @State private var subscriptionToDelete: MoviePilotSubscription?
     @State private var downloadToDelete: MoviePilotDownloadTask?
+    @State private var workflowToRun: MoviePilotWorkflow?
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var isCompact: Bool {
@@ -84,15 +85,28 @@ struct MoviePilotCenterView: View {
         } message: {
             Text(downloadToDelete?.displayTitle ?? "确认删除这个下载任务？")
         }
+        .confirmationDialog("运行工作流", isPresented: workflowRunDialog, titleVisibility: .visible) {
+            Button("从头开始") {
+                runPendingWorkflow(fromBeginning: true)
+            }
+            Button("从上次位置继续") {
+                runPendingWorkflow(fromBeginning: false)
+            }
+            Button("取消", role: .cancel) {
+                workflowToRun = nil
+            }
+        } message: {
+            if let workflowToRun {
+                Text("\(workflowToRun.displayName)\n工作流 ID：\(workflowToRun.id)")
+            }
+        }
     }
 
     private var header: some View {
         Group {
             if isCompact {
                 VStack(alignment: .leading, spacing: 14) {
-                    Text("订阅、下载任务和消息")
-                        .font(.system(size: 13, weight: .medium))
-                        .foregroundStyle(.secondary)
+                    titleBlock
                     tabControl
                 }
             } else {
@@ -107,9 +121,9 @@ struct MoviePilotCenterView: View {
 
     private var titleBlock: some View {
         VStack(alignment: .leading, spacing: 4) {
-            Text("媒体助手")
+            Text("MoviePilot")
                 .font(.system(size: isCompact ? 30 : 34, weight: .bold))
-            Text("订阅、下载任务和消息")
+            Text(viewModel.supportsWorkflows ? "订阅、下载任务、消息和工作流" : "订阅、下载任务和消息")
                 .font(.system(size: 13, weight: .medium))
                 .foregroundStyle(.secondary)
         }
@@ -118,10 +132,11 @@ struct MoviePilotCenterView: View {
     private var tabControl: some View {
         NativeSegmentedControl(
             selection: $selectedTab,
-            items: MoviePilotCenterTab.allCases,
+            items: viewModel.availableTabs,
             title: { $0.segmentTitle }
         )
-        .frame(maxWidth: isCompact ? .infinity : 300)
+        .frame(maxWidth: isCompact ? .infinity : nil)
+        .frame(width: isCompact ? nil : (viewModel.supportsWorkflows ? 400 : 300))
         .frame(height: 44)
     }
 
@@ -134,6 +149,8 @@ struct MoviePilotCenterView: View {
             subscriptionsContent
         case .messages:
             messagesContent
+        case .workflows:
+            workflowsContent
         }
     }
 
@@ -307,6 +324,70 @@ struct MoviePilotCenterView: View {
         }
     }
 
+    private var workflowsContent: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack(spacing: 10) {
+                TextField("按名称筛选", text: $viewModel.workflowNameFilter)
+                    .textFieldStyle(.roundedBorder)
+                    .frame(maxWidth: 260)
+                    .onSubmit {
+                        Task { await viewModel.loadWorkflows() }
+                    }
+
+                Picker("状态", selection: $viewModel.workflowStateFilter) {
+                    ForEach(MoviePilotWorkflowStateFilter.allCases) { filter in
+                        Text(filter.displayName).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 130)
+
+                Picker("触发方式", selection: $viewModel.workflowTriggerFilter) {
+                    ForEach(MoviePilotWorkflowTriggerFilter.allCases) { filter in
+                        Text(filter.displayName).tag(filter)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+
+                Button("应用筛选") {
+                    Task { await viewModel.loadWorkflows() }
+                }
+                .disabled(viewModel.isLoadingWorkflows || viewModel.isPerformingAction)
+
+                Spacer()
+            }
+
+            if (viewModel.isLoadingWorkflows || viewModel.errorMessage == nil) &&
+                !viewModel.hasLoadedWorkflows &&
+                viewModel.workflows.isEmpty {
+                ProgressView()
+                    .frame(maxWidth: .infinity)
+                    .padding(.top, 80)
+            } else if viewModel.workflows.isEmpty {
+                ContentUnavailableView(
+                    "未找到工作流",
+                    systemImage: "point.3.connected.trianglepath.dotted",
+                    description: Text("可以调整筛选条件后重新查询。")
+                )
+                .frame(maxWidth: .infinity)
+                .padding(.top, 80)
+            } else {
+                LazyVStack(spacing: 8) {
+                    ForEach(viewModel.workflows) { workflow in
+                        MoviePilotWorkflowRow(
+                            workflow: workflow,
+                            isPerformingAction: viewModel.isPerformingAction,
+                            onRun: {
+                                workflowToRun = workflow
+                            }
+                        )
+                    }
+                }
+            }
+        }
+    }
+
     private var subscriptionDeleteDialog: Binding<Bool> {
         Binding(
             get: { subscriptionToDelete != nil },
@@ -323,6 +404,120 @@ struct MoviePilotCenterView: View {
                 if !isPresented { downloadToDelete = nil }
             }
         )
+    }
+
+    private var workflowRunDialog: Binding<Bool> {
+        Binding(
+            get: { workflowToRun != nil },
+            set: { isPresented in
+                if !isPresented { workflowToRun = nil }
+            }
+        )
+    }
+
+    private func runPendingWorkflow(fromBeginning: Bool) {
+        guard let workflow = workflowToRun else { return }
+        workflowToRun = nil
+        Task {
+            await viewModel.runWorkflow(workflow, fromBeginning: fromBeginning)
+        }
+    }
+}
+
+private struct MoviePilotWorkflowRow: View {
+    let workflow: MoviePilotWorkflow
+    let isPerformingAction: Bool
+    let onRun: () -> Void
+
+    var body: some View {
+        HStack(alignment: .top, spacing: 14) {
+            Image(systemName: "point.3.connected.trianglepath.dotted")
+                .font(.system(size: 18, weight: .semibold))
+                .foregroundStyle(.indigo)
+                .frame(width: 38, height: 38)
+                .background(.indigo.opacity(0.12))
+                .clipShape(Circle())
+
+            VStack(alignment: .leading, spacing: 8) {
+                HStack(alignment: .firstTextBaseline, spacing: 8) {
+                    Text(workflow.displayName)
+                        .font(.system(size: 15, weight: .semibold))
+
+                    Text("ID \(workflow.id)")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.tertiary)
+
+                    Spacer()
+
+                    workflowStateBadge
+                }
+
+                if let description = nonEmpty(workflow.description) {
+                    Text(description)
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                        .fixedSize(horizontal: false, vertical: true)
+                }
+
+                HStack(spacing: 12) {
+                    Label(workflow.displayTriggerType, systemImage: "bolt.fill")
+                    Label("运行 \(workflow.runCount ?? 0) 次", systemImage: "number")
+
+                    if let lastTime = nonEmpty(workflow.lastTime) {
+                        Label(lastTime, systemImage: "clock")
+                    }
+                }
+                .font(.system(size: 11, weight: .medium))
+                .foregroundStyle(.secondary)
+
+                if let currentAction = nonEmpty(workflow.currentAction) {
+                    Label("当前动作：\(currentAction)", systemImage: "arrow.right.circle")
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+            }
+            .textSelection(.enabled)
+
+            Button("运行") {
+                onRun()
+            }
+            .buttonStyle(.borderedProminent)
+            .controlSize(.small)
+            .disabled(isPerformingAction)
+        }
+        .padding(14)
+        .frame(maxWidth: .infinity, alignment: .leading)
+        .background(.ultraThinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+        .overlay {
+            RoundedRectangle(cornerRadius: 8, style: .continuous)
+                .stroke(.primary.opacity(0.06), lineWidth: 1)
+        }
+    }
+
+    private var workflowStateBadge: some View {
+        Text(workflow.displayState)
+            .font(.system(size: 11, weight: .bold))
+            .foregroundStyle(stateTint)
+            .padding(.horizontal, 8)
+            .padding(.vertical, 4)
+            .background(stateTint.opacity(0.13))
+            .clipShape(Capsule())
+    }
+
+    private var stateTint: Color {
+        switch workflow.displayState {
+        case "运行中": return .blue
+        case "成功": return .green
+        case "失败": return .red
+        case "暂停": return .orange
+        default: return .secondary
+        }
+    }
+
+    private func nonEmpty(_ value: String?) -> String? {
+        let trimmed = value?.trimmingCharacters(in: .whitespacesAndNewlines)
+        return trimmed?.isEmpty == false ? trimmed : nil
     }
 }
 

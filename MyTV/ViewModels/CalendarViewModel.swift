@@ -4,10 +4,13 @@ import Foundation
 @MainActor
 final class CalendarViewModel {
     var groupedShows: [CalendarGroup] = []
+    var moviePilotStates: [String: MoviePilotEpisodeState] = [:]
     var isLoading = false
+    var isLoadingMoviePilotStates = false
     var errorMessage: String?
 
     let daysToLoad = 14
+    private var moviePilotStateTask: Task<Void, Never>?
 
     var totalEpisodeCount: Int {
         groupedShows.reduce(0) { $0 + $1.shows.count }
@@ -30,19 +33,107 @@ final class CalendarViewModel {
             errorMessage = L10n.string("请先登录")
             return
         }
+        moviePilotStateTask?.cancel()
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        moviePilotStates = [:]
 
         let startDate = Self.apiDateFormatter.string(from: Date())
 
         do {
             let shows = try await CalendarAPI.myShows(startDate: startDate, days: daysToLoad)
             groupedShows = makeGroups(from: shows)
+            isLoading = false
+            moviePilotStateTask = Task { [weak self] in
+                await self?.loadMoviePilotStates(for: shows)
+            }
         } catch {
             print("加载日历失败: \(error)")
             errorMessage = L10n.string("加载失败: %@", error.localizedDescription)
+            isLoading = false
         }
+    }
+
+    func refresh() async {
+        moviePilotStateTask?.cancel()
+        await MoviePilotMediaStatusProvider.shared.invalidate()
+        CacheService.clearAllAPIResponses()
+        await load()
+    }
+
+    private func loadMoviePilotStates(for shows: [CalendarShowDTO]) async {
+        guard (try? MoviePilotSettingsStore.currentConfiguration()) != nil else {
+            isLoadingMoviePilotStates = false
+            return
+        }
+
+        let targetsByTMDB = Dictionary(
+            shows.compactMap { item -> (Int, MoviePilotMediaTarget)? in
+                guard let tmdbId = item.show.ids.tmdb,
+                      item.episode?.season ?? 0 > 0 else {
+                    return nil
+                }
+                return (tmdbId, .show(item.show))
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
+        guard !targetsByTMDB.isEmpty else {
+            isLoadingMoviePilotStates = false
+            return
+        }
+
+        isLoadingMoviePilotStates = true
+        defer { isLoadingMoviePilotStates = false }
+
+        let targets = targetsByTMDB.map { (tmdbId: $0.key, target: $0.value) }
+        var statusesByTMDB: [Int: MoviePilotMediaStatus] = [:]
+        let concurrencyLimit = 4
+
+        for startIndex in stride(from: 0, to: targets.count, by: concurrencyLimit) {
+            guard !Task.isCancelled else { return }
+            let endIndex = min(startIndex + concurrencyLimit, targets.count)
+            let batch = Array(targets[startIndex..<endIndex])
+
+            await withTaskGroup(of: (Int, MoviePilotMediaStatus?).self) { group in
+                for entry in batch {
+                    group.addTask {
+                        do {
+                            let status = try await MoviePilotMediaStatusProvider.shared.status(
+                                for: entry.target
+                            )
+                            return (entry.tmdbId, status)
+                        } catch {
+                            return (entry.tmdbId, nil)
+                        }
+                    }
+                }
+
+                for await (tmdbId, status) in group {
+                    if let status {
+                        statusesByTMDB[tmdbId] = status
+                    }
+                }
+            }
+        }
+
+        guard !Task.isCancelled else { return }
+        moviePilotStates = Dictionary(
+            shows.compactMap { item -> (String, MoviePilotEpisodeState)? in
+                guard let episode = item.episode,
+                      let tmdbId = item.show.ids.tmdb,
+                      let status = statusesByTMDB[tmdbId],
+                      let state = MoviePilotEpisodeStateResolver.state(
+                          season: episode.season,
+                          episode: episode.number,
+                          firstAired: episode.firstAired ?? item.firstAired,
+                          status: status
+                      ) else {
+                    return nil
+                }
+                return (item.id, state)
+            },
+            uniquingKeysWith: { first, _ in first }
+        )
     }
 
     private func makeGroups(from shows: [CalendarShowDTO]) -> [CalendarGroup] {

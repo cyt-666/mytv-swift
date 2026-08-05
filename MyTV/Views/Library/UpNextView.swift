@@ -69,7 +69,7 @@ private struct UpNextRow: View {
             )
         } label: {
             HStack(spacing: 12) {
-                AsyncPosterImage(urlString: item.posterURL)
+                AsyncShowPosterImage(show: item.show)
                     .frame(width: 60, height: 90)
                     .clipShape(RoundedRectangle(cornerRadius: 6))
 

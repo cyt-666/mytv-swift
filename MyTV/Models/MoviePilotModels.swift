@@ -71,6 +71,23 @@ struct MoviePilotConnectionResult: Equatable, Sendable {
     }
 }
 
+enum MoviePilotFeature: String, Sendable {
+    case resourceSearch
+    case subscriptionOptions
+    case workflows
+
+    var requiredTools: Set<String> {
+        switch self {
+        case .resourceSearch:
+            return ["search_torrents", "get_search_results", "add_download_tasks"]
+        case .subscriptionOptions:
+            return ["add_subscribe"]
+        case .workflows:
+            return ["query_workflows", "run_workflow"]
+        }
+    }
+}
+
 struct MoviePilotToolCallRequest: Encodable, Sendable {
     let toolName: String
     let arguments: [String: MoviePilotJSONValue]
@@ -525,6 +542,16 @@ extension MoviePilotMediaTarget {
     }
 
     static func show(_ show: ShowDetailsDTO) -> MoviePilotMediaTarget {
+        MoviePilotMediaTarget(
+            kind: .tv,
+            title: show.title,
+            year: show.year,
+            tmdbId: show.ids.tmdb,
+            traktId: show.ids.trakt
+        )
+    }
+
+    static func show(_ show: ShowDTO) -> MoviePilotMediaTarget {
         MoviePilotMediaTarget(
             kind: .tv,
             title: show.title,

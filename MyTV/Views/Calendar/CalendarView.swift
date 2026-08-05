@@ -18,7 +18,7 @@ struct CalendarView: View {
                     ContentUnavailableView {
                         Text(error)
                     } actions: {
-                        Button("重试") { Task { CacheService.clearAllAPIResponses(); await viewModel.load() } }
+                        Button("重试") { Task { await viewModel.refresh() } }
                     }
                     .frame(maxWidth: .infinity, minHeight: 360)
                 } else if viewModel.groupedShows.isEmpty {
@@ -32,12 +32,16 @@ struct CalendarView: View {
                     CalendarHeroView(
                         rangeTitle: viewModel.rangeTitle,
                         totalCount: viewModel.totalEpisodeCount,
-                        todayCount: viewModel.todayEpisodeCount
+                        todayCount: viewModel.todayEpisodeCount,
+                        isLoadingMoviePilotStates: viewModel.isLoadingMoviePilotStates
                     )
 
                     LazyVStack(alignment: .leading, spacing: 24) {
                         ForEach(viewModel.groupedShows) { group in
-                            CalendarDaySection(group: group) { route in
+                            CalendarDaySection(
+                                group: group,
+                                moviePilotStates: viewModel.moviePilotStates
+                            ) { route in
                                 appState.navigate(to: route)
                             }
                         }
@@ -54,7 +58,7 @@ struct CalendarView: View {
         .toolbar {
             ToolbarItem(placement: .primaryAction) {
                 Button {
-                    Task { CacheService.clearAllAPIResponses(); await viewModel.load() }
+                    Task { await viewModel.refresh() }
                 } label: {
                     Image(systemName: "arrow.clockwise")
                         .symbolEffect(.rotate, isActive: viewModel.isLoading)
@@ -70,6 +74,7 @@ private struct CalendarHeroView: View {
     let rangeTitle: String
     let totalCount: Int
     let todayCount: Int
+    let isLoadingMoviePilotStates: Bool
     @Environment(\.colorScheme) private var colorScheme
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -127,6 +132,12 @@ private struct CalendarHeroView: View {
             Text("追踪观看清单中即将播出的单集")
                 .font(.system(size: 14, weight: .medium))
                 .foregroundStyle(.secondary)
+
+            if isLoadingMoviePilotStates {
+                Label("正在补充 MoviePilot 状态", systemImage: "arrow.triangle.2.circlepath")
+                    .font(.system(size: 11, weight: .semibold))
+                    .foregroundStyle(.secondary)
+            }
         }
     }
 
@@ -163,6 +174,7 @@ private struct CalendarSummaryMetric: View {
 
 private struct CalendarDaySection: View {
     let group: CalendarGroup
+    let moviePilotStates: [String: MoviePilotEpisodeState]
     let onSelect: (Route) -> Void
 
     var body: some View {
@@ -201,7 +213,11 @@ private struct CalendarDaySection: View {
 
             LazyVStack(spacing: 14) {
                 ForEach(group.shows) { show in
-                    CalendarEpisodeButton(show: show, onSelect: onSelect)
+                    CalendarEpisodeButton(
+                        show: show,
+                        moviePilotState: moviePilotStates[show.id],
+                        onSelect: onSelect
+                    )
                 }
             }
         }
@@ -210,13 +226,14 @@ private struct CalendarDaySection: View {
 
 private struct CalendarEpisodeButton: View {
     let show: CalendarShowDTO
+    let moviePilotState: MoviePilotEpisodeState?
     let onSelect: (Route) -> Void
 
     var body: some View {
         Button {
             onSelect(route)
         } label: {
-            CalendarEpisodeCard(show: show)
+            CalendarEpisodeCard(show: show, moviePilotState: moviePilotState)
         }
         .buttonStyle(.plain)
     }
@@ -235,6 +252,7 @@ private struct CalendarEpisodeButton: View {
 
 private struct CalendarEpisodeCard: View {
     let show: CalendarShowDTO
+    let moviePilotState: MoviePilotEpisodeState?
     @State private var showTranslation: TranslationResult?
     @State private var episodeTranslation: TranslationResult?
     @State private var isHovered = false
@@ -329,6 +347,10 @@ private struct CalendarEpisodeCard: View {
                         .font(.system(size: 12, weight: .semibold))
                         .foregroundStyle(.secondary)
                         .lineLimit(1)
+                }
+
+                if let moviePilotState {
+                    MoviePilotEpisodeStateBadge(state: moviePilotState)
                 }
 
                 Spacer(minLength: 0)

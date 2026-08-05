@@ -9,12 +9,34 @@ struct BrowseFilterOption: Hashable, Identifiable {
     var localizedTitle: String { L10n.string(title) }
 }
 
+enum BrowseMediaType: String, CaseIterable, Identifiable {
+    case movies
+    case shows
+
+    var id: String { rawValue }
+
+    var localizedTitle: String {
+        switch self {
+        case .movies: return L10n.string("电影")
+        case .shows: return L10n.string("电视剧")
+        }
+    }
+
+    var systemImage: String {
+        switch self {
+        case .movies: return "film"
+        case .shows: return "tv"
+        }
+    }
+}
+
 @Observable
 @MainActor
 final class BrowseViewModel {
+    var selectedMediaType: BrowseMediaType = .movies
     var selectedGenre = ""
     var selectedCountry = ""
-    var items: [MovieDTO] = []
+    var items: [MediaItem] = []
     var isLoading = false
     var isLoadingMore = false
     var canLoadMore = true
@@ -24,7 +46,7 @@ final class BrowseViewModel {
     private let pageSize = 30
     private let loadMoreThreshold = 6
 
-    let genres = [
+    private let allGenres = [
         BrowseFilterOption(title: "动作", value: "action"),
         BrowseFilterOption(title: "冒险", value: "adventure"),
         BrowseFilterOption(title: "动画", value: "animation"),
@@ -45,6 +67,16 @@ final class BrowseViewModel {
         BrowseFilterOption(title: "战争", value: "war"),
         BrowseFilterOption(title: "西部", value: "western")
     ]
+
+    var genres: [BrowseFilterOption] {
+        selectedMediaType == .shows
+            ? allGenres.filter { $0.value != "tv-movie" }
+            : allGenres
+    }
+
+    var hasActiveFilters: Bool {
+        !selectedGenre.isEmpty || !selectedCountry.isEmpty
+    }
 
     let countries = [
         BrowseFilterOption(title: "美国", value: "us"),
@@ -85,7 +117,7 @@ final class BrowseViewModel {
         }
     }
 
-    func loadMoreIfNeeded(currentItem: MovieDTO? = nil) async {
+    func loadMoreIfNeeded(currentItem: MediaItem? = nil) async {
         guard shouldLoadMore(for: currentItem) else { return }
 
         errorMessage = nil
@@ -104,25 +136,65 @@ final class BrowseViewModel {
         }
     }
 
-    private func fetchPage(_ page: Int) async throws -> [MovieDTO] {
-        let genre = selectedGenre.isEmpty ? nil : selectedGenre
-        let country = selectedCountry.isEmpty ? nil : selectedCountry
-        return try await MovieAPI.popular(page: page, limit: pageSize, genres: genre, countries: country)
+    func prepareForMediaTypeChange() {
+        if selectedMediaType == .shows, selectedGenre == "tv-movie" {
+            selectedGenre = ""
+        }
     }
 
-    private func shouldLoadMore(for currentItem: MovieDTO?) -> Bool {
+    func clearFilters() {
+        selectedGenre = ""
+        selectedCountry = ""
+    }
+
+    private func fetchPage(_ page: Int) async throws -> [MediaItem] {
+        let genre = selectedGenre.isEmpty ? nil : selectedGenre
+        let country = selectedCountry.isEmpty ? nil : selectedCountry
+        let hasFilters = genre != nil || country != nil
+
+        switch selectedMediaType {
+        case .movies:
+            if hasFilters {
+                return try await MovieAPI.watched(
+                    period: "all",
+                    page: page,
+                    limit: pageSize,
+                    genres: genre,
+                    countries: country
+                )
+                .map { MediaItem.movie($0.movie) }
+            }
+            return try await MovieAPI.popular(page: page, limit: pageSize, genres: genre, countries: country)
+                .map(MediaItem.movie)
+        case .shows:
+            if hasFilters {
+                return try await ShowAPI.watched(
+                    period: "all",
+                    page: page,
+                    limit: pageSize,
+                    genres: genre,
+                    countries: country
+                )
+                .map { MediaItem.show($0.show) }
+            }
+            return try await ShowAPI.popular(page: page, limit: pageSize, genres: genre, countries: country)
+                .map(MediaItem.show)
+        }
+    }
+
+    private func shouldLoadMore(for currentItem: MediaItem?) -> Bool {
         guard canLoadMore, !isLoading, !isLoadingMore else { return false }
         guard let currentItem else { return true }
-        guard let index = items.firstIndex(where: { $0.ids.trakt == currentItem.ids.trakt }) else {
+        guard let index = items.firstIndex(of: currentItem) else {
             return false
         }
         let thresholdIndex = max(items.count - loadMoreThreshold, 0)
         return index >= thresholdIndex
     }
 
-    private func appendUnique(_ newItems: [MovieDTO]) -> Int {
-        let existingIds = Set(items.map(\.ids.trakt))
-        let uniqueItems = newItems.filter { !existingIds.contains($0.ids.trakt) }
+    private func appendUnique(_ newItems: [MediaItem]) -> Int {
+        let existingIds = Set(items.map(\.id))
+        let uniqueItems = newItems.filter { !existingIds.contains($0.id) }
         items.append(contentsOf: uniqueItems)
         return uniqueItems.count
     }

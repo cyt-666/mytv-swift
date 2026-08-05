@@ -91,6 +91,16 @@ enum CacheService {
         try? modelContext.save()
     }
 
+    @MainActor static func removeAPIResponses(keyPrefix: String) {
+        guard let modelContext else { return }
+        let descriptor = FetchDescriptor<APIResponseCache>()
+        guard let entries = try? modelContext.fetch(descriptor) else { return }
+        for entry in entries where entry.key.hasPrefix(keyPrefix) {
+            modelContext.delete(entry)
+        }
+        try? modelContext.save()
+    }
+
     // MARK: - User Data Cache
 
     @MainActor static func getUserData<T: Decodable>(key: String) -> (data: T, isStale: Bool)? {

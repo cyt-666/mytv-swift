@@ -88,25 +88,31 @@ final class MediaListActionViewModel {
         }
     }
 
-    func addToWatchlist(_ target: MediaListTarget) async {
+    @discardableResult
+    func addToWatchlist(_ target: MediaListTarget) async -> Bool {
         guard isLoggedIn else {
             errorMessage = L10n.string("登录 Trakt 后才能加入观看清单")
-            return
+            return false
         }
 
+        var wasAdded = false
         let didUpdate = await submit(
             successMessage: L10n.string("%@已加入观看清单", target.successName),
             alreadyMessage: L10n.string("%@已在观看清单中", target.successName)
         ) {
             switch target {
             case .movie(let id):
-                _ = try await SyncAPI.addToWatchlist(movies: [id])
+                let result = try await SyncAPI.addToWatchlist(movies: [id])
+                wasAdded = (result.added?.movies ?? 0) > 0
             case .show(let id):
-                _ = try await SyncAPI.addToWatchlist(shows: [id])
+                let result = try await SyncAPI.addToWatchlist(shows: [id])
+                wasAdded = (result.added?.shows ?? 0) > 0
             case .season(let id):
-                _ = try await SyncAPI.addToWatchlist(seasons: [id])
+                let result = try await SyncAPI.addToWatchlist(seasons: [id])
+                wasAdded = (result.added?.seasons ?? 0) > 0
             case .episode(let id):
-                _ = try await SyncAPI.addToWatchlist(episodes: [id])
+                let result = try await SyncAPI.addToWatchlist(episodes: [id])
+                wasAdded = (result.added?.episodes ?? 0) > 0
             }
             CacheService.clearAPIResponses(containing: "user_watchlist")
             CacheService.clearAPIResponses(containing: "watchlist_items_")
@@ -114,7 +120,11 @@ final class MediaListActionViewModel {
         }
         if didUpdate {
             isInWatchlist = true
+            if !wasAdded {
+                message = "\(target.successName)已在观看清单中"
+            }
         }
+        return didUpdate && wasAdded
     }
 
     func removeFromWatchlist(_ target: MediaListTarget) async {
