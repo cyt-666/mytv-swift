@@ -8,8 +8,12 @@ final class SettingsViewModel {
     var moviePilotAPIKey = ""
     var moviePilotNotificationsEnabled = false
     var moviePilotNotificationCategories = MoviePilotNotificationCategory.defaultEnabled
+    var moviePilotSubscriptionPreferences = MoviePilotSubscriptionPreferences.default
+    var moviePilotSites: [MoviePilotConfiguredSite] = []
+    var moviePilotRuleGroups: [MoviePilotRuleGroup] = []
     var isTestingMoviePilot = false
     var isSavingMoviePilot = false
+    var isLoadingSubscriptionOptions = false
     var moviePilotMessage: String?
     var moviePilotErrorMessage: String?
     var availableMoviePilotTools: Set<String> = []
@@ -35,6 +39,7 @@ final class SettingsViewModel {
         moviePilotAPIKey = (try? MoviePilotSettingsStore.apiKey()) ?? ""
         moviePilotNotificationsEnabled = MoviePilotSettingsStore.notificationsEnabled()
         moviePilotNotificationCategories = MoviePilotSettingsStore.notificationCategories()
+        moviePilotSubscriptionPreferences = MoviePilotSettingsStore.subscriptionPreferences()
     }
 
     func saveMoviePilotSettings() async {
@@ -49,8 +54,11 @@ final class SettingsViewModel {
             try MoviePilotSettingsStore.setAPIKey(moviePilotAPIKey)
             moviePilotHost = MoviePilotSettingsStore.host()
             moviePilotAPIKey = (try? MoviePilotSettingsStore.apiKey()) ?? ""
+            await MoviePilotAPIClient.shared.invalidateToolCatalog()
+            await MoviePilotMediaStatusProvider.shared.invalidate()
             moviePilotMessage = L10n.string("MoviePilot 设置已保存")
             MoviePilotNotificationService.shared.restartIfNeeded()
+            await loadSubscriptionOptions()
         } catch {
             moviePilotErrorMessage = error.localizedDescription
         }
@@ -85,9 +93,15 @@ final class SettingsViewModel {
             try MoviePilotSettingsStore.clearConnection()
             loadMoviePilotSettings()
             availableMoviePilotTools = []
+            moviePilotSites = []
+            moviePilotRuleGroups = []
             moviePilotMessage = L10n.string("MoviePilot 设置已清除")
             moviePilotErrorMessage = nil
             MoviePilotNotificationService.shared.stop()
+            Task {
+                await MoviePilotAPIClient.shared.invalidateToolCatalog()
+                await MoviePilotMediaStatusProvider.shared.invalidate()
+            }
         } catch {
             moviePilotErrorMessage = error.localizedDescription
         }
@@ -130,5 +144,36 @@ final class SettingsViewModel {
         MoviePilotSettingsStore.setNotificationCategories(moviePilotNotificationCategories)
         MoviePilotNotificationService.shared.restartIfNeeded()
         moviePilotMessage = L10n.string("通知类型已更新")
+    }
+
+    func saveMoviePilotSubscriptionPreferences() {
+        MoviePilotSettingsStore.setSubscriptionPreferences(moviePilotSubscriptionPreferences)
+        moviePilotMessage = "MoviePilot 订阅偏好已保存"
+        moviePilotErrorMessage = nil
+    }
+
+    func loadSubscriptionOptions() async {
+        guard isMoviePilotConfigured, !isLoadingSubscriptionOptions else {
+            if !isMoviePilotConfigured {
+                moviePilotSites = []
+                moviePilotRuleGroups = []
+            }
+            return
+        }
+
+        isLoadingSubscriptionOptions = true
+        defer { isLoadingSubscriptionOptions = false }
+
+        do {
+            async let sites = MoviePilotAPIClient.shared.fetchConfiguredSites()
+            async let ruleGroups = MoviePilotAPIClient.shared.fetchRuleGroups()
+            moviePilotSites = try await sites
+            moviePilotRuleGroups = try await ruleGroups
+        } catch {
+            moviePilotSites = []
+            moviePilotRuleGroups = []
+            moviePilotErrorMessage = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
+        }
     }
 }

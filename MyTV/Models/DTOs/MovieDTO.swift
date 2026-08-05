@@ -42,6 +42,20 @@ struct ImagesDTO: Codable, Hashable {
     }
 }
 
+extension ImagesDTO {
+    var preferredPosterURL: String? {
+        firstNonEmptyURL(in: poster) ??
+        firstNonEmptyURL(in: thumb) ??
+        firstNonEmptyURL(in: fanart) ??
+        firstNonEmptyURL(in: banner) ??
+        firstNonEmptyURL(in: screenshot)
+    }
+
+    private func firstNonEmptyURL(in values: [String]?) -> String? {
+        values?.first { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+    }
+}
+
 // MARK: - Movie Details
 
 struct MovieDetailsDTO: Codable, Identifiable {

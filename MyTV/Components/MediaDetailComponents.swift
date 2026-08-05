@@ -353,6 +353,7 @@ struct MediaListActionMenu: View {
     let viewModel: MediaListActionViewModel
     var prominent = true
     var iconOnly = false
+    var onWatchlistAdded: (() -> Void)?
     @State private var isShowingSheet = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
@@ -391,8 +392,12 @@ struct MediaListActionMenu: View {
             .disabled(target == nil || viewModel.isSubmitting)
             .help(viewModel.hasJoinedList ? "管理观看清单和自定义列表" : "加入观看清单或自定义列表")
             .sheet(isPresented: $isShowingSheet) {
-                MediaListActionSheet(target: target, viewModel: viewModel)
-                    .adaptiveDetailSheetFrame()
+                MediaListActionSheet(
+                    target: target,
+                    viewModel: viewModel,
+                    onWatchlistAdded: onWatchlistAdded
+                )
+                .adaptiveDetailSheetFrame()
             }
             .task(id: target) {
                 await viewModel.loadStateIfNeeded(for: target)
@@ -433,12 +438,14 @@ struct MediaListActionMenu: View {
 private struct MediaListActionSheet: View {
     let target: MediaListTarget?
     let viewModel: MediaListActionViewModel
+    let onWatchlistAdded: (() -> Void)?
     @Environment(\.dismiss) private var dismiss
     @State private var newListName = ""
     @State private var newListDescription = ""
     @State private var privacy = "private"
     @State private var displayNumbers = false
     @State private var allowComments = true
+    @State private var shouldNotifyWatchlistAdded = false
 
     private let privacyOptions = [
         ("private", "私密"),
@@ -485,7 +492,11 @@ private struct MediaListActionSheet: View {
                         if viewModel.isInWatchlist {
                             await viewModel.removeFromWatchlist(target)
                         } else {
-                            await viewModel.addToWatchlist(target)
+                            let wasAdded = await viewModel.addToWatchlist(target)
+                            if wasAdded, onWatchlistAdded != nil {
+                                shouldNotifyWatchlistAdded = true
+                                dismiss()
+                            }
                         }
                     }
 
@@ -571,6 +582,12 @@ private struct MediaListActionSheet: View {
         }
         .task(id: target) {
             await viewModel.loadStateIfNeeded(for: target)
+        }
+        .onDisappear {
+            if shouldNotifyWatchlistAdded {
+                shouldNotifyWatchlistAdded = false
+                onWatchlistAdded?()
+            }
         }
     }
 

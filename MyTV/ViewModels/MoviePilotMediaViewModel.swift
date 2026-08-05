@@ -44,7 +44,11 @@ final class MoviePilotMediaViewModel {
         }
     }
 
-    func subscribe(target: MoviePilotMediaTarget, seasons: [Int]? = nil) async {
+    func subscribe(
+        target: MoviePilotMediaTarget,
+        seasons: [Int]? = nil,
+        preferences: MoviePilotSubscriptionPreferences = .default
+    ) async {
         guard isConfigured else {
             errorMessage = L10n.string("请先配置 MoviePilot")
             return
@@ -69,13 +73,23 @@ final class MoviePilotMediaViewModel {
             if target.kind == .tv, let selectedSeasons {
                 var results: [String] = []
                 for season in selectedSeasons {
-                    let result = try await MoviePilotAPIClient.shared.addSubscribe(target: target, season: season)
+                    let result = try await MoviePilotAPIClient.shared.addSubscribe(
+                        target: target,
+                        season: season,
+                        preferences: preferences
+                    )
                     results.append(result)
                 }
                 showMessage(L10n.string("已提交 %d 个季度订阅", results.count))
             } else {
-                showMessage(try await MoviePilotAPIClient.shared.addSubscribe(target: target))
+                showMessage(
+                    try await MoviePilotAPIClient.shared.addSubscribe(
+                        target: target,
+                        preferences: preferences
+                    )
+                )
             }
+            await MoviePilotMediaStatusProvider.shared.invalidate(target)
             await loadStatus(for: target)
         } catch {
             errorMessage = message(for: error)
@@ -84,6 +98,29 @@ final class MoviePilotMediaViewModel {
 
     func isSeasonSubscribed(_ season: Int) -> Bool {
         status.isSeasonSubscribed(season)
+    }
+
+    func isFullySubscribed(target: MoviePilotMediaTarget, seasons: [SeasonDTO] = []) -> Bool {
+        guard status.hasSubscription else { return false }
+        guard target.kind == .tv else { return true }
+        if status.subscriptions.contains(where: { $0.season == nil }) {
+            return true
+        }
+
+        let regularSeasons = seasons.filter { $0.number > 0 }
+        guard !regularSeasons.isEmpty else { return true }
+        return regularSeasons.allSatisfy { isSeasonSubscribed($0.number) }
+    }
+
+    func shouldOfferWatchlistSubscription(
+        target: MoviePilotMediaTarget,
+        seasons: [SeasonDTO] = []
+    ) -> Bool {
+        guard isConfigured, target.tmdbId != nil else { return false }
+        if target.kind == .movie, status.hasLibraryItem {
+            return false
+        }
+        return !isFullySubscribed(target: target, seasons: seasons)
     }
 
     func setSubscription(_ subscription: MoviePilotSubscription, paused: Bool, target: MoviePilotMediaTarget) async {

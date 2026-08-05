@@ -8,6 +8,7 @@ enum MoviePilotSettingsStore {
     private static let notificationsEnabledKey = "moviepilot.notificationsEnabled"
     private static let notificationCategoriesKey = "moviepilot.notificationCategories"
     private static let lastMessageIdKey = "moviepilot.lastMessageId"
+    private static let subscriptionPreferencesKey = "moviepilot.subscriptionPreferences"
     private static let keychainService = "com.mytv.moviepilot"
     private static let apiKeyAccount = "apiKey"
 
@@ -32,7 +33,9 @@ enum MoviePilotSettingsStore {
 
     static func setHost(_ host: String) {
         let trimmed = host.trimmingCharacters(in: .whitespacesAndNewlines)
-        CacheService.setConfig(key: hostKey, value: Data(trimmed.utf8))
+        let value = trimmed.isEmpty ? defaultHost : trimmed
+        CacheService.setConfig(key: hostKey, value: Data(value.utf8))
+        MoviePilotResourceSearchCache.clearAll()
     }
 
     static func apiKey() throws -> String? {
@@ -46,6 +49,7 @@ enum MoviePilotSettingsStore {
         } else {
             try KeychainService.save(trimmed, service: keychainService, account: apiKeyAccount)
         }
+        MoviePilotResourceSearchCache.clearAll()
     }
 
     static func clearConnection() throws {
@@ -54,6 +58,7 @@ enum MoviePilotSettingsStore {
         setNotificationCategories(MoviePilotNotificationCategory.defaultEnabled)
         CacheService.setConfig(key: lastMessageIdKey, value: Data("0".utf8))
         try KeychainService.delete(service: keychainService, account: apiKeyAccount)
+        MoviePilotResourceSearchCache.clearAll()
     }
 
     static func notificationsEnabled() -> Bool {
@@ -116,6 +121,22 @@ enum MoviePilotSettingsStore {
             return false
         }
         return true
+    }
+
+    static func subscriptionPreferences() -> MoviePilotSubscriptionPreferences {
+        guard let data = CacheService.getConfig(key: subscriptionPreferencesKey),
+              let preferences = try? JSONDecoder().decode(
+                MoviePilotSubscriptionPreferences.self,
+                from: data
+              ) else {
+            return .default
+        }
+        return preferences
+    }
+
+    static func setSubscriptionPreferences(_ preferences: MoviePilotSubscriptionPreferences) {
+        guard let data = try? JSONEncoder().encode(preferences) else { return }
+        CacheService.setConfig(key: subscriptionPreferencesKey, value: data)
     }
 
     static func currentConfiguration() throws -> (host: String, apiKey: String)? {

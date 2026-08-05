@@ -5,6 +5,7 @@ struct ShowDetailView: View {
     @State private var viewModel: ShowDetailViewModel?
     @State private var listActionViewModel = MediaListActionViewModel()
     @State private var moviePilotViewModel = MoviePilotMediaViewModel()
+    @State private var isShowingWatchlistSubscriptionSheet = false
     @Environment(AppState.self) private var appState
     @Environment(\.scenePhase) private var scenePhase
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
@@ -141,6 +142,16 @@ struct ShowDetailView: View {
             guard phase == .active, let viewModel else { return }
             Task { await viewModel.refreshWatchedStatus() }
         }
+        .sheet(isPresented: $isShowingWatchlistSubscriptionSheet) {
+            if let viewModel, let show = viewModel.show {
+                MoviePilotSubscriptionSheet(
+                    target: .show(show),
+                    seasons: viewModel.seasons.filter { $0.number > 0 },
+                    viewModel: moviePilotViewModel,
+                    introMessage: "已加入 Trakt Watchlist，是否同时创建 MoviePilot 季度订阅？"
+                )
+            }
+        }
     }
 
     private func showHero(
@@ -265,7 +276,16 @@ struct ShowDetailView: View {
     ) -> some View {
         MediaListActionMenu(
             target: .show(show.ids.trakt),
-            viewModel: listActionViewModel
+            viewModel: listActionViewModel,
+            onWatchlistAdded: {
+                guard moviePilotViewModel.shouldOfferWatchlistSubscription(
+                    target: moviePilotTarget,
+                    seasons: seasons
+                ) else {
+                    return
+                }
+                isShowingWatchlistSubscriptionSheet = true
+            }
         )
 
         DetailMarkWatchedButton(
@@ -289,6 +309,15 @@ struct ShowDetailView: View {
                 seasons: seasons,
                 viewModel: moviePilotViewModel,
                 onConfigure: navigateToSettings
+            )
+
+            MoviePilotResourceSearchButton(
+                target: moviePilotTarget,
+                onDownloaded: {
+                    Task {
+                        await moviePilotViewModel.loadStatus(for: moviePilotTarget)
+                    }
+                }
             )
         }
     }

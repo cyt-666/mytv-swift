@@ -4,6 +4,7 @@ enum MoviePilotCenterTab: String, CaseIterable, Identifiable {
     case downloads = "下载任务"
     case subscriptions = "订阅"
     case messages = "通知消息"
+    case workflows = "工作流"
 
     var id: String { rawValue }
 
@@ -12,6 +13,7 @@ enum MoviePilotCenterTab: String, CaseIterable, Identifiable {
         case .downloads: return "arrow.down.circle.fill"
         case .subscriptions: return "checkmark.seal.fill"
         case .messages: return "bell.badge.fill"
+        case .workflows: return "point.3.connected.trianglepath.dotted"
         }
     }
 
@@ -20,6 +22,7 @@ enum MoviePilotCenterTab: String, CaseIterable, Identifiable {
         case .downloads: return L10n.string("下载")
         case .subscriptions: return L10n.string("订阅")
         case .messages: return L10n.string("消息")
+        case .workflows: return L10n.string("工作流")
         }
     }
 }
@@ -44,17 +47,25 @@ final class MoviePilotCenterViewModel {
     var subscriptions: [MoviePilotSubscription] = []
     var downloads: [MoviePilotDownloadTask] = []
     var messages: [MoviePilotMessage] = []
+    var workflows: [MoviePilotWorkflow] = []
     var subscriptionResolutions: [Int: MoviePilotSubscriptionResolution] = [:]
     var messageResolutions: [Int: MoviePilotMessageResolution] = [:]
 
     var isLoadingSubscriptions = false
     var isLoadingDownloads = false
     var isLoadingMessages = false
+    var isLoadingWorkflows = false
+    var isCheckingWorkflowCapability = false
     var isResolvingSubscriptionPosters = false
     var isResolvingMessagePosters = false
     var hasLoadedSubscriptions = false
     var hasLoadedDownloads = false
     var hasLoadedMessages = false
+    var hasLoadedWorkflows = false
+    var supportsWorkflows = false
+    var workflowStateFilter = MoviePilotWorkflowStateFilter.all
+    var workflowTriggerFilter = MoviePilotWorkflowTriggerFilter.all
+    var workflowNameFilter = ""
     var isPerformingAction = false
     var actionMessage: String?
     var errorMessage: String?
@@ -69,7 +80,17 @@ final class MoviePilotCenterViewModel {
     }
 
     var isLoading: Bool {
-        isLoadingSubscriptions || isLoadingDownloads || isLoadingMessages
+        isLoadingSubscriptions ||
+        isLoadingDownloads ||
+        isLoadingMessages ||
+        isLoadingWorkflows ||
+        isCheckingWorkflowCapability
+    }
+
+    var availableTabs: [MoviePilotCenterTab] {
+        supportsWorkflows
+            ? [.downloads, .subscriptions, .messages, .workflows]
+            : [.downloads, .subscriptions, .messages]
     }
 
     func loadAll() async {
@@ -77,17 +98,41 @@ final class MoviePilotCenterViewModel {
             subscriptions = []
             downloads = []
             messages = []
+            workflows = []
             hasLoadedSubscriptions = false
             hasLoadedDownloads = false
             hasLoadedMessages = false
+            hasLoadedWorkflows = false
+            supportsWorkflows = false
             errorMessage = L10n.string("请先在设置中配置 MoviePilot")
             return
         }
 
+        await loadWorkflowCapability()
         async let downloadsLoad: Void = loadDownloads()
         async let subscriptionsLoad: Void = loadSubscriptions()
         async let messagesLoad: Void = loadMessages()
+        if supportsWorkflows {
+            await loadWorkflows()
+        }
         _ = await (downloadsLoad, subscriptionsLoad, messagesLoad)
+    }
+
+    func loadWorkflowCapability() async {
+        guard isConfigured else {
+            supportsWorkflows = false
+            return
+        }
+        guard !isCheckingWorkflowCapability else { return }
+
+        isCheckingWorkflowCapability = true
+        defer { isCheckingWorkflowCapability = false }
+
+        do {
+            supportsWorkflows = try await MoviePilotAPIClient.shared.supports(.workflows)
+        } catch {
+            supportsWorkflows = false
+        }
     }
 
     func loadDownloads() async {
@@ -174,6 +219,33 @@ final class MoviePilotCenterViewModel {
         }
     }
 
+    func loadWorkflows() async {
+        guard isConfigured, supportsWorkflows else {
+            workflows = []
+            hasLoadedWorkflows = false
+            return
+        }
+        guard !isLoadingWorkflows else { return }
+
+        isLoadingWorkflows = true
+        errorMessage = nil
+        defer { isLoadingWorkflows = false }
+
+        do {
+            workflows = try await MoviePilotAPIClient.shared.fetchWorkflows(
+                state: workflowStateFilter.rawValue,
+                name: workflowNameFilter,
+                triggerType: workflowTriggerFilter.rawValue
+            )
+            hasLoadedWorkflows = true
+        } catch {
+            if !hasLoadedWorkflows {
+                workflows = []
+            }
+            errorMessage = message(for: error)
+        }
+    }
+
     func setSubscription(_ subscription: MoviePilotSubscription, paused: Bool) async {
         await performAction(refresh: loadSubscriptions) {
             try await MoviePilotAPIClient.shared.updateSubscription(
@@ -218,6 +290,36 @@ final class MoviePilotCenterViewModel {
         }
     }
 
+    func runWorkflow(_ workflow: MoviePilotWorkflow, fromBeginning: Bool) async {
+        guard isConfigured, supportsWorkflows else {
+            errorMessage = "当前 MoviePilot 不支持工作流管理"
+            return
+        }
+        guard !isPerformingAction else { return }
+
+        isPerformingAction = true
+        actionMessage = nil
+        errorMessage = nil
+        defer { isPerformingAction = false }
+
+        do {
+            actionMessage = try await MoviePilotAPIClient.shared.runWorkflow(
+                id: workflow.id,
+                fromBeginning: fromBeginning
+            )
+            await loadWorkflows()
+        } catch let error as MoviePilotError {
+            if case .operationTimedOut(let operation) = error,
+               operation == "run_workflow" {
+                errorMessage = "工作流执行等待超时，MoviePilot 可能仍在执行，请刷新状态确认；不会自动重试。"
+            } else {
+                errorMessage = message(for: error)
+            }
+        } catch {
+            errorMessage = message(for: error)
+        }
+    }
+
     func refresh(tab: MoviePilotCenterTab) async {
         switch tab {
         case .downloads:
@@ -226,6 +328,8 @@ final class MoviePilotCenterViewModel {
             await loadSubscriptions()
         case .messages:
             await loadMessages()
+        case .workflows:
+            await loadWorkflows()
         }
     }
 

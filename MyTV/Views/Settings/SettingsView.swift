@@ -91,6 +91,7 @@ struct SettingsView: View {
         }
         .task {
             viewModel.loadMoviePilotSettings()
+            await viewModel.loadSubscriptionOptions()
             await notificationService.refreshAuthorizationStatus()
         }
     }
@@ -177,6 +178,10 @@ struct SettingsView: View {
 
                 Divider()
 
+                subscriptionPreferencesSection
+
+                Divider()
+
                 VStack(alignment: .leading, spacing: 12) {
                     HStack(alignment: .center, spacing: 12) {
                         VStack(alignment: .leading, spacing: 4) {
@@ -201,28 +206,34 @@ struct SettingsView: View {
 
                     VStack(spacing: 8) {
                         ForEach(MoviePilotNotificationCategory.allCases) { category in
-                            Toggle(isOn: Binding(
-                                get: { viewModel.moviePilotNotificationCategories.contains(category) },
-                                set: { enabled in
-                                    viewModel.setMoviePilotNotificationCategory(category, enabled: enabled)
+                            HStack(spacing: 12) {
+                                Image(systemName: category.systemImage)
+                                    .frame(width: 28)
+
+                                VStack(alignment: .leading, spacing: 2) {
+                                    Text(category.displayName)
+                                        .font(.system(size: 13, weight: .semibold))
+                                    Text(category.settingsDescription)
+                                        .font(.system(size: 11, weight: .medium))
+                                        .foregroundStyle(.secondary)
                                 }
-                            )) {
-                                Label {
-                                    VStack(alignment: .leading, spacing: 2) {
-                                        Text(category.displayName)
-                                            .font(.system(size: 13, weight: .semibold))
-                                        Text(category.settingsDescription)
-                                            .font(.system(size: 11, weight: .medium))
-                                            .foregroundStyle(.secondary)
+                                .frame(maxWidth: .infinity, alignment: .leading)
+
+                                Toggle("", isOn: Binding(
+                                    get: { viewModel.moviePilotNotificationCategories.contains(category) },
+                                    set: { enabled in
+                                        viewModel.setMoviePilotNotificationCategory(category, enabled: enabled)
                                     }
-                                } icon: {
-                                    Image(systemName: category.systemImage)
-                                }
+                                ))
+                                .toggleStyle(.switch)
+                                .labelsHidden()
+                                .accessibilityLabel(category.displayName)
                             }
-                            .toggleStyle(.switch)
+                            .frame(maxWidth: .infinity)
                             .disabled(!viewModel.moviePilotNotificationsEnabled)
                         }
                     }
+                    .frame(maxWidth: .infinity)
                     .padding(12)
                     .background(.thinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
@@ -316,6 +327,83 @@ struct SettingsView: View {
         }
     }
 
+    private var subscriptionPreferencesSection: some View {
+        VStack(alignment: .leading, spacing: 12) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("订阅偏好")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text("作为每次订阅的默认值，确认时仍可临时修改")
+                        .font(.system(size: 12, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Picker(
+                    "默认预设",
+                    selection: $viewModel.moviePilotSubscriptionPreferences.preset
+                ) {
+                    ForEach(MoviePilotSubscriptionPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+            }
+
+            Text(viewModel.moviePilotSubscriptionPreferences.preset.description)
+                .font(.system(size: 12, weight: .medium))
+                .foregroundStyle(.secondary)
+
+            if viewModel.moviePilotSubscriptionPreferences.preset == .custom {
+                VStack(spacing: 9) {
+                    TextField(
+                        "质量正则，例如 BluRay|WEB-DL",
+                        text: $viewModel.moviePilotSubscriptionPreferences.customQuality
+                    )
+                    TextField(
+                        "分辨率正则，例如 1080p|2160p",
+                        text: $viewModel.moviePilotSubscriptionPreferences.customResolution
+                    )
+                    TextField(
+                        "特效正则，例如 HDR|DV|SDR",
+                        text: $viewModel.moviePilotSubscriptionPreferences.customEffect
+                    )
+
+                    HStack(spacing: 10) {
+                        SubscriptionSiteMenu(
+                            sites: viewModel.moviePilotSites,
+                            selection: $viewModel.moviePilotSubscriptionPreferences.siteIDs
+                        )
+                        SubscriptionRuleGroupMenu(
+                            groups: viewModel.moviePilotRuleGroups,
+                            selection: $viewModel.moviePilotSubscriptionPreferences.filterGroupNames
+                        )
+                        if viewModel.isLoadingSubscriptionOptions {
+                            ProgressView().controlSize(.small)
+                        }
+                        Spacer()
+                    }
+                }
+                .textFieldStyle(.roundedBorder)
+                .padding(12)
+                .background(.thinMaterial)
+                .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+            }
+
+            HStack {
+                Spacer()
+                Button {
+                    viewModel.saveMoviePilotSubscriptionPreferences()
+                } label: {
+                    Label("保存订阅偏好", systemImage: "slider.horizontal.3")
+                }
+                .buttonStyle(.borderedProminent)
+            }
+        }
+    }
+
     private var moviePilotStatusIcon: String {
         if !viewModel.isMoviePilotConfigured { return "link.badge.plus" }
         if viewModel.availableMoviePilotTools.isEmpty { return "link" }
@@ -340,5 +428,71 @@ struct SettingsView: View {
         }
         UIApplication.shared.open(url)
         #endif
+    }
+}
+
+private struct SubscriptionSiteMenu: View {
+    let sites: [MoviePilotConfiguredSite]
+    @Binding var selection: Set<Int>
+
+    var body: some View {
+        Menu {
+            if sites.isEmpty {
+                Text("MoviePilot 未提供可选站点")
+            } else {
+                ForEach(sites) { site in
+                    Button {
+                        if selection.contains(site.id) {
+                            selection.remove(site.id)
+                        } else {
+                            selection.insert(site.id)
+                        }
+                    } label: {
+                        Label(
+                            site.name,
+                            systemImage: selection.contains(site.id) ? "checkmark" : ""
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(
+                selection.isEmpty ? "全部站点" : "已选 \(selection.count) 个站点",
+                systemImage: "globe"
+            )
+        }
+    }
+}
+
+private struct SubscriptionRuleGroupMenu: View {
+    let groups: [MoviePilotRuleGroup]
+    @Binding var selection: Set<String>
+
+    var body: some View {
+        Menu {
+            if groups.isEmpty {
+                Text("MoviePilot 未提供规则组")
+            } else {
+                ForEach(groups) { group in
+                    Button {
+                        if selection.contains(group.name) {
+                            selection.remove(group.name)
+                        } else {
+                            selection.insert(group.name)
+                        }
+                    } label: {
+                        Label(
+                            group.name,
+                            systemImage: selection.contains(group.name) ? "checkmark" : ""
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(
+                selection.isEmpty ? "不指定规则组" : "已选 \(selection.count) 个规则组",
+                systemImage: "line.3.horizontal.decrease.circle"
+            )
+        }
     }
 }

@@ -6,7 +6,7 @@ struct MoviePilotSubscribeButton: View {
     let viewModel: MoviePilotMediaViewModel
     let onConfigure: () -> Void
 
-    @State private var isShowingSeasonPicker = false
+    @State private var isShowingSubscriptionSheet = false
     @Environment(\.horizontalSizeClass) private var horizontalSizeClass
 
     private var isCompact: Bool {
@@ -34,8 +34,8 @@ struct MoviePilotSubscribeButton: View {
         .fixedSize(horizontal: true, vertical: true)
         .disabled(viewModel.isSubscribing || isFullySubscribed)
         .help(buttonHelp)
-        .sheet(isPresented: $isShowingSeasonPicker) {
-            MoviePilotSeasonPickerSheet(
+        .sheet(isPresented: $isShowingSubscriptionSheet) {
+            MoviePilotSubscriptionSheet(
                 target: target,
                 seasons: seasons.filter { $0.number > 0 },
                 viewModel: viewModel
@@ -94,13 +94,7 @@ struct MoviePilotSubscribeButton: View {
     }
 
     private var isFullySubscribed: Bool {
-        guard viewModel.status.hasSubscription else { return false }
-        guard target.kind == .tv else { return true }
-        if viewModel.status.subscriptions.contains(where: { $0.season == nil }) {
-            return true
-        }
-        guard !regularSeasons.isEmpty else { return true }
-        return regularSeasons.allSatisfy { viewModel.isSeasonSubscribed($0.number) }
+        viewModel.isFullySubscribed(target: target, seasons: regularSeasons)
     }
 
     private func handleTap() {
@@ -109,11 +103,7 @@ struct MoviePilotSubscribeButton: View {
             return
         }
         guard !isFullySubscribed else { return }
-        if target.kind == .tv {
-            isShowingSeasonPicker = true
-        } else {
-            Task { await viewModel.subscribe(target: target) }
-        }
+        isShowingSubscriptionSheet = true
     }
 }
 
@@ -363,27 +353,43 @@ struct MoviePilotStatusPanel: View {
     }
 }
 
-private struct MoviePilotSeasonPickerSheet: View {
+struct MoviePilotSubscriptionSheet: View {
     let target: MoviePilotMediaTarget
     let seasons: [SeasonDTO]
     let viewModel: MoviePilotMediaViewModel
+    let introMessage: String?
 
     @Environment(\.dismiss) private var dismiss
     @State private var selectedSeasons: Set<Int>
+    @State private var preferences: MoviePilotSubscriptionPreferences
+    @State private var availableSites: [MoviePilotConfiguredSite] = []
+    @State private var availableRuleGroups: [MoviePilotRuleGroup] = []
+    @State private var isLoadingOptions = false
+    @State private var optionsErrorMessage: String?
 
-    init(target: MoviePilotMediaTarget, seasons: [SeasonDTO], viewModel: MoviePilotMediaViewModel) {
+    init(
+        target: MoviePilotMediaTarget,
+        seasons: [SeasonDTO] = [],
+        viewModel: MoviePilotMediaViewModel,
+        introMessage: String? = nil
+    ) {
         self.target = target
-        self.seasons = seasons
+        self.seasons = seasons.filter { $0.number > 0 }.sorted { $0.number < $1.number }
         self.viewModel = viewModel
-        _selectedSeasons = State(initialValue: Set(seasons.first.map { [$0.number] } ?? []))
+        self.introMessage = introMessage
+        let defaultSeason = self.seasons.first { !viewModel.isSeasonSubscribed($0.number) }?.number
+        _selectedSeasons = State(initialValue: Set(defaultSeason.map { [$0] } ?? []))
+        _preferences = State(initialValue: MoviePilotSettingsStore.subscriptionPreferences())
     }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 18) {
             HStack(alignment: .firstTextBaseline) {
                 VStack(alignment: .leading, spacing: 4) {
-                    Text("选择订阅季度")
+                    Text(target.kind == .tv ? "确认 MoviePilot 季度订阅" : "确认 MoviePilot 订阅")
                         .font(.system(size: 22, weight: .bold))
+                        .lineLimit(1)
+                        .minimumScaleFactor(0.85)
                     Text(target.title)
                         .font(.system(size: 13, weight: .medium))
                         .foregroundStyle(.secondary)
@@ -404,28 +410,47 @@ private struct MoviePilotSeasonPickerSheet: View {
                 .clipShape(Circle())
             }
 
-            if seasons.isEmpty {
-                Label("暂无可订阅季度", systemImage: "rectangle.stack.badge.minus")
-                    .font(.system(size: 14, weight: .semibold))
+            if let introMessage {
+                Label(introMessage, systemImage: "bookmark.fill")
+                    .font(.system(size: 12, weight: .semibold))
                     .foregroundStyle(.secondary)
+                    .padding(12)
                     .frame(maxWidth: .infinity, alignment: .leading)
-                    .padding(14)
                     .background(.thinMaterial)
                     .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
-            } else {
-                ScrollView {
-                    LazyVStack(spacing: 8) {
-                        ForEach(seasons) { season in
-                            seasonRow(season)
+            }
+
+            if target.kind == .tv {
+                if seasons.isEmpty {
+                    Label("暂无可订阅季度", systemImage: "rectangle.stack.badge.minus")
+                        .font(.system(size: 14, weight: .semibold))
+                        .foregroundStyle(.secondary)
+                        .frame(maxWidth: .infinity, alignment: .leading)
+                        .padding(14)
+                        .background(.thinMaterial)
+                        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+                } else {
+                    ScrollView {
+                        LazyVStack(spacing: 8) {
+                            ForEach(seasons) { season in
+                                seasonRow(season)
+                            }
                         }
                     }
+                    .frame(maxHeight: 280)
                 }
-                .frame(maxHeight: 320)
             }
+
+            subscriptionOptions
 
             if let error = viewModel.errorMessage {
                 Label(error, systemImage: "exclamationmark.triangle.fill")
                     .font(.system(size: 12, weight: .semibold))
+                    .foregroundStyle(.orange)
+            }
+            if let optionsErrorMessage {
+                Label(optionsErrorMessage, systemImage: "exclamationmark.triangle")
+                    .font(.system(size: 11, weight: .semibold))
                     .foregroundStyle(.orange)
             }
 
@@ -438,22 +463,159 @@ private struct MoviePilotSeasonPickerSheet: View {
 
                 Button {
                     Task {
-                        await viewModel.subscribe(target: target, seasons: Array(selectedSeasons))
+                        await viewModel.subscribe(
+                            target: target,
+                            seasons: target.kind == .tv ? Array(selectedSeasons) : nil,
+                            preferences: preferences
+                        )
                         if viewModel.errorMessage == nil {
                             dismiss()
                         }
                     }
                 } label: {
-                    Label(viewModel.isSubscribing ? L10n.string("提交中...") : L10n.string("订阅所选"), systemImage: "arrow.down.circle.fill")
+                    Label(
+                        viewModel.isSubscribing
+                            ? L10n.string("提交中...")
+                            : L10n.string(target.kind == .tv ? "订阅所选" : "确认订阅"),
+                        systemImage: "arrow.down.circle.fill"
+                    )
                 }
                 .buttonStyle(.borderedProminent)
-                .disabled(selectedSeasons.isEmpty || viewModel.isSubscribing)
+                .disabled(
+                    (target.kind == .tv && selectedSeasons.isEmpty) ||
+                    viewModel.isSubscribing
+                )
             }
         }
         .padding(22)
+        .frame(minWidth: 360, idealWidth: 560, maxWidth: 560)
         .onAppear {
-            let defaultSeason = seasons.first { !viewModel.isSeasonSubscribed($0.number) }?.number ?? seasons.first?.number
+            let defaultSeason = seasons.first { !viewModel.isSeasonSubscribed($0.number) }?.number
             selectedSeasons = Set(defaultSeason.map { [$0] } ?? [])
+        }
+        .task(id: preferences.preset) {
+            if preferences.preset == .custom {
+                await loadOptions()
+            }
+        }
+    }
+
+    private var subscriptionOptions: some View {
+        VStack(alignment: .leading, spacing: 11) {
+            HStack {
+                VStack(alignment: .leading, spacing: 3) {
+                    Text("本次订阅预设")
+                        .font(.system(size: 14, weight: .semibold))
+                    Text(preferences.preset.description)
+                        .font(.system(size: 11, weight: .medium))
+                        .foregroundStyle(.secondary)
+                }
+
+                Spacer()
+
+                Picker("预设", selection: $preferences.preset) {
+                    ForEach(MoviePilotSubscriptionPreset.allCases) { preset in
+                        Text(preset.displayName).tag(preset)
+                    }
+                }
+                .labelsHidden()
+                .frame(width: 150)
+            }
+
+            if preferences.preset == .custom {
+                TextField("质量正则，例如 BluRay|WEB-DL", text: $preferences.customQuality)
+                TextField("分辨率正则，例如 1080p|2160p", text: $preferences.customResolution)
+                TextField("特效正则，例如 HDR|DV|SDR", text: $preferences.customEffect)
+
+                HStack(spacing: 10) {
+                    subscriptionSiteMenu
+                    subscriptionRuleGroupMenu
+                    if isLoadingOptions {
+                        ProgressView().controlSize(.small)
+                    }
+                }
+            }
+        }
+        .textFieldStyle(.roundedBorder)
+        .padding(13)
+        .background(.thinMaterial)
+        .clipShape(RoundedRectangle(cornerRadius: 8, style: .continuous))
+    }
+
+    private var subscriptionSiteMenu: some View {
+        Menu {
+            if availableSites.isEmpty {
+                Text("未提供可选站点")
+            } else {
+                ForEach(availableSites) { site in
+                    Button {
+                        if preferences.siteIDs.contains(site.id) {
+                            preferences.siteIDs.remove(site.id)
+                        } else {
+                            preferences.siteIDs.insert(site.id)
+                        }
+                    } label: {
+                        Label(
+                            site.name,
+                            systemImage: preferences.siteIDs.contains(site.id) ? "checkmark" : ""
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(
+                preferences.siteIDs.isEmpty ? "全部站点" : "站点 \(preferences.siteIDs.count)",
+                systemImage: "globe"
+            )
+        }
+    }
+
+    private var subscriptionRuleGroupMenu: some View {
+        Menu {
+            if availableRuleGroups.isEmpty {
+                Text("未提供规则组")
+            } else {
+                ForEach(availableRuleGroups) { group in
+                    Button {
+                        if preferences.filterGroupNames.contains(group.name) {
+                            preferences.filterGroupNames.remove(group.name)
+                        } else {
+                            preferences.filterGroupNames.insert(group.name)
+                        }
+                    } label: {
+                        Label(
+                            group.name,
+                            systemImage: preferences.filterGroupNames.contains(group.name)
+                                ? "checkmark"
+                                : ""
+                        )
+                    }
+                }
+            }
+        } label: {
+            Label(
+                preferences.filterGroupNames.isEmpty
+                    ? "不指定规则组"
+                    : "规则组 \(preferences.filterGroupNames.count)",
+                systemImage: "line.3.horizontal.decrease.circle"
+            )
+        }
+    }
+
+    private func loadOptions() async {
+        guard preferences.preset == .custom, !isLoadingOptions else { return }
+        isLoadingOptions = true
+        optionsErrorMessage = nil
+        defer { isLoadingOptions = false }
+
+        do {
+            async let sites = MoviePilotAPIClient.shared.fetchConfiguredSites()
+            async let ruleGroups = MoviePilotAPIClient.shared.fetchRuleGroups()
+            availableSites = try await sites
+            availableRuleGroups = try await ruleGroups
+        } catch {
+            optionsErrorMessage = (error as? LocalizedError)?.errorDescription
+                ?? error.localizedDescription
         }
     }
 
@@ -504,5 +666,6 @@ private struct MoviePilotSeasonPickerSheet: View {
             }
         }
         .buttonStyle(.plain)
+        .disabled(isSubscribed)
     }
 }

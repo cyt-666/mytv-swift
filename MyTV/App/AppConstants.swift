@@ -55,6 +55,7 @@ enum AppConstants {
         static let apiList: TimeInterval = 4 * 60 * 60               // 4 hours
         static let staleWhileRevalidate: TimeInterval = 60 * 60      // 1 hour
         static let staleWhileRevalidateUser: TimeInterval = 5 * 60   // 5 minutes
+        static let moviePilotResourceSearch: TimeInterval = 15 * 60  // 15 minutes
     }
 
     // MARK: - Translation
