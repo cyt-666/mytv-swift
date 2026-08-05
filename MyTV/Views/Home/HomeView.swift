@@ -609,7 +609,7 @@ private struct ContinueWatchingCard: View {
             VStack(alignment: .leading, spacing: 8) {
                 // Poster with episode overlay
                 ZStack(alignment: .bottomLeading) {
-                    AsyncPosterImage(urlString: item.posterURL)
+                    AsyncShowPosterImage(show: item.show)
                         .frame(width: posterWidth, height: posterWidth * 1.5)
                         .clipShape(RoundedRectangle(cornerRadius: 10))
 
