@@ -11,10 +11,8 @@ struct BrowseView: View {
     var body: some View {
         ScrollView {
             VStack(spacing: 20) {
-                if isCompact {
-                    filterControls
-                        .padding(.horizontal, 16)
-                }
+                browseControls
+                    .padding(.horizontal, isCompact ? 16 : 20)
 
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
@@ -38,10 +36,9 @@ struct BrowseView: View {
                     .frame(maxWidth: .infinity, minHeight: 360)
                 } else {
                     MediaGridView(
-                        items: viewModel.items.map { .movie($0) },
+                        items: viewModel.items,
                         onItemAppear: { item in
-                            guard case .movie(let movie) = item else { return }
-                            Task { await viewModel.loadMoreIfNeeded(currentItem: movie) }
+                            Task { await viewModel.loadMoreIfNeeded(currentItem: item) }
                         }
                     )
                     .padding(.horizontal, isCompact ? 16 : 20)
@@ -59,12 +56,17 @@ struct BrowseView: View {
             .padding(.top, 24)
         }
         .task { await viewModel.load() }
+        .onChange(of: viewModel.selectedMediaType) { _, _ in
+            viewModel.prepareForMediaTypeChange()
+            Task { await viewModel.load(reset: true) }
+        }
         .onChange(of: viewModel.selectedGenre) { _, _ in Task { await viewModel.load(reset: true) } }
         .onChange(of: viewModel.selectedCountry) { _, _ in Task { await viewModel.load(reset: true) } }
         .toolbar {
             ToolbarItem(placement: .principal) {
                 if !isCompact {
-                    filterControls
+                    mediaTypePicker
+                        .frame(width: 180)
                 }
             }
 
@@ -81,28 +83,100 @@ struct BrowseView: View {
         }
     }
 
-    private var filterControls: some View {
-        HStack(spacing: 8) {
-            Picker("类型", selection: $viewModel.selectedGenre) {
-                Text("全部类型").tag("")
-                ForEach(viewModel.genres) { genre in
-                    Text(genre.localizedTitle).tag(genre.value)
-                }
+    @ViewBuilder
+    private var browseControls: some View {
+        if isCompact {
+            VStack(alignment: .leading, spacing: 12) {
+                mediaTypePicker
+                    .frame(maxWidth: .infinity)
+                filterFields
             }
-            .pickerStyle(.menu)
-            .controlSize(.regular)
+        } else {
+            filterFields
+        }
+    }
 
-            Picker("国家", selection: $viewModel.selectedCountry) {
-                Text("全部国家").tag("")
-                ForEach(viewModel.countries) { country in
-                    Text(country.localizedTitle).tag(country.value)
-                }
+    private var mediaTypePicker: some View {
+        Picker(L10n.string("媒体类型"), selection: $viewModel.selectedMediaType) {
+            ForEach(BrowseMediaType.allCases) { mediaType in
+                Text(mediaType.localizedTitle)
+                    .tag(mediaType)
             }
-            .pickerStyle(.menu)
-            .controlSize(.regular)
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
+        .accessibilityLabel(L10n.string("媒体类型"))
+    }
+
+    private var filterFields: some View {
+        HStack(alignment: .bottom, spacing: 14) {
+            filterField(title: "类型", systemImage: "theatermasks") {
+                genrePicker
+            }
+
+            filterField(title: "国家", systemImage: "globe.asia.australia") {
+                countryPicker
+            }
 
             Spacer(minLength: 0)
+            clearFiltersButton
         }
-        .frame(maxWidth: .infinity, alignment: .leading)
+    }
+
+    private func filterField<Content: View>(
+        title: LocalizedStringKey,
+        systemImage: String,
+        @ViewBuilder content: () -> Content
+    ) -> some View {
+        VStack(alignment: .leading, spacing: 5) {
+            Label(title, systemImage: systemImage)
+                .font(.caption.weight(.medium))
+                .foregroundStyle(.secondary)
+            content()
+        }
+    }
+
+    private var genrePicker: some View {
+        Picker("", selection: $viewModel.selectedGenre) {
+            Text("全部类型").tag("")
+            ForEach(viewModel.genres) { genre in
+                Text(genre.localizedTitle).tag(genre.value)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.regular)
+        .labelsHidden()
+        .frame(minWidth: 132)
+        .accessibilityLabel(L10n.string("类型"))
+    }
+
+    private var countryPicker: some View {
+        Picker("", selection: $viewModel.selectedCountry) {
+            Text("全部国家").tag("")
+            ForEach(viewModel.countries) { country in
+                Text(country.localizedTitle).tag(country.value)
+            }
+        }
+        .pickerStyle(.menu)
+        .controlSize(.regular)
+        .labelsHidden()
+        .frame(minWidth: 132)
+        .accessibilityLabel(L10n.string("国家"))
+    }
+
+    @ViewBuilder
+    private var clearFiltersButton: some View {
+        if viewModel.hasActiveFilters {
+            Button {
+                viewModel.clearFilters()
+            } label: {
+                Label("清除", systemImage: "xmark")
+            }
+            .buttonStyle(.borderless)
+            .foregroundStyle(.secondary)
+            .help(L10n.string("清除筛选"))
+            .accessibilityLabel(L10n.string("清除筛选"))
+        }
     }
 }

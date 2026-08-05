@@ -68,7 +68,7 @@ import Foundation
     }
 
     static func watched(period: String = "weekly", page: Int = 1, limit: Int = 15, genres: String? = nil, countries: String? = nil) async throws -> [MovieWatchedDTO] {
-        let cacheKey = "api_movie_watched_\(period)_p\(page)_l\(limit)"
+        let cacheKey = "api_movie_watched_\(period)_p\(page)_l\(limit)_g\(genres ?? "nil")_c\(countries ?? "nil")"
         if let cached: [MovieWatchedDTO] = CacheService.getAPIResponse(key: cacheKey) {
             return cached
         }

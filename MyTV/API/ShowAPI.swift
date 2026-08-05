@@ -43,6 +43,20 @@ import Foundation
         return result
     }
 
+    static func watched(period: String = "weekly", page: Int = 1, limit: Int = 15, genres: String? = nil, countries: String? = nil) async throws -> [ShowWatchedDTO] {
+        let cacheKey = "api_show_watched_\(period)_p\(page)_l\(limit)_g\(genres ?? "nil")_c\(countries ?? "nil")"
+        if let cached: [ShowWatchedDTO] = CacheService.getAPIResponse(key: cacheKey) {
+            return cached
+        }
+        var params: [String: String] = ["extended": "full,images"]
+        params.merge(TraktEndpoint.makePagination(page: page, limit: limit)) { $1 }
+        params.merge(TraktEndpoint.makeFilter(genres: genres, countries: countries)) { $1 }
+
+        let result: [ShowWatchedDTO] = try await TraktAPIClient.shared.request(uri: "/shows/watched/\(period)", params: params)
+        CacheService.setAPIResponse(key: cacheKey, data: result)
+        return result
+    }
+
     static func details(id: Int) async throws -> ShowDetailsDTO {
         if let cached: (data: ShowDetailsDTO, isStale: Bool) = CacheService.getMediaCache(mediaType: "show", traktId: id) {
             if cached.isStale {

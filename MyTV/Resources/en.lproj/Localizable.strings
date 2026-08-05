@@ -322,6 +322,9 @@
 "全部国家" = "All Countries";
 "暂无结果" = "No Results";
 "换一个类型或国家试试" = "Try another genre or country.";
+"媒体类型" = "Media Type";
+"筛选" = "Filters";
+"清除筛选" = "Clear Filters";
 "类型" = "Genre";
 "国家" = "Country";
 "刷新" = "Refresh";
