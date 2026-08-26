@@ -3,21 +3,64 @@ import Foundation
 @Observable
 @MainActor
 final class HistoryViewModel {
+    enum Filter: String, CaseIterable, Hashable {
+        case all
+        case movies
+        case shows
+
+        var title: String {
+            switch self {
+            case .all:
+                return L10n.string("全部")
+            case .movies:
+                return L10n.string("电影")
+            case .shows:
+                return L10n.string("剧集")
+            }
+        }
+
+        var apiType: String? {
+            switch self {
+            case .all:
+                return nil
+            case .movies:
+                return "movies"
+            case .shows:
+                return "shows"
+            }
+        }
+    }
+
     var items: [HistoryItem] = []
+    var selectedFilter: Filter = .all
     var isLoading = false
     var errorMessage: String?
+    private var loadRequestID = 0
 
     func load() async {
         guard AuthService.shared.isLoggedIn else {
+            items = []
             errorMessage = "请先登录"
             return
         }
+
+        loadRequestID += 1
+        let requestID = loadRequestID
+        let targetFilter = selectedFilter
+
         isLoading = true
         errorMessage = nil
-        defer { isLoading = false }
+        items = []
+        defer {
+            if requestID == loadRequestID {
+                isLoading = false
+            }
+        }
 
         do {
-            let result = try await UserAPI.history(limit: 50)
+            let result = try await UserAPI.history(type: targetFilter.apiType, limit: 50)
+            guard requestID == loadRequestID else { return }
+
             items = result.map { item in
                 HistoryItem(
                     title: item.movie?.title ?? item.show?.title ?? item.episode?.title ?? "未知",
@@ -31,6 +74,8 @@ final class HistoryViewModel {
                 )
             }
         } catch {
+            guard requestID == loadRequestID else { return }
+
             print("加载观看历史失败: \(error)")
             errorMessage = "加载失败: \(error.localizedDescription)"
         }

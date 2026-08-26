@@ -2,10 +2,20 @@ import SwiftUI
 
 struct HistoryView: View {
     @State private var viewModel = HistoryViewModel()
+    @Environment(\.horizontalSizeClass) private var horizontalSizeClass
+
+    private var isCompact: Bool {
+        AdaptiveLayout.isCompact(horizontalSizeClass)
+    }
 
     var body: some View {
         ScrollView {
             VStack(spacing: 12) {
+                if isCompact {
+                    filterPicker
+                        .padding(.horizontal, 16)
+                }
+
                 if viewModel.isLoading && viewModel.items.isEmpty {
                     ProgressView()
                         .frame(maxWidth: .infinity)
@@ -26,17 +36,27 @@ struct HistoryView: View {
                     .padding(.top, 100)
                 } else {
                     LazyVStack(spacing: 8) {
-                        ForEach(viewModel.items.indices, id: \.self) { index in
-                            HistoryRow(item: viewModel.items[index])
+                        ForEach(viewModel.items) { item in
+                            HistoryRow(item: item)
                         }
                     }
                     .padding(.horizontal, 20)
-                    .padding(.top, 60)
+                    .padding(.top, isCompact ? 24 : 60)
                 }
             }
         }
         .task { await viewModel.load() }
+        .onChange(of: viewModel.selectedFilter) { _, _ in
+            Task { await viewModel.load() }
+        }
         .toolbar {
+            ToolbarItem(placement: .principal) {
+                if !isCompact {
+                    filterPicker
+                        .frame(width: 220)
+                }
+            }
+
             ToolbarItem(placement: .primaryAction) {
                 Button {
                     Task { CacheService.clearAllAPIResponses(); await viewModel.load() }
@@ -48,6 +68,17 @@ struct HistoryView: View {
                 .help("刷新")
             }
         }
+    }
+
+    private var filterPicker: some View {
+        Picker("观看记录类型", selection: $viewModel.selectedFilter) {
+            ForEach(HistoryViewModel.Filter.allCases, id: \.self) { filter in
+                Text(filter.title).tag(filter)
+            }
+        }
+        .pickerStyle(.segmented)
+        .controlSize(.regular)
+        .labelsHidden()
     }
 }
 
@@ -81,7 +112,7 @@ private struct HistoryRow: View {
 
             Spacer()
 
-            Text(item.mediaType == "movie" ? "电影" : "剧集")
+            Text(item.mediaType == "movie" ? L10n.string("电影") : L10n.string("剧集"))
                 .font(.caption)
                 .padding(.horizontal, 8)
                 .padding(.vertical, 2)
