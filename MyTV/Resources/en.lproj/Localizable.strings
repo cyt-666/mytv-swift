@@ -15,6 +15,7 @@
 "账号" = "Account";
 "媒体" = "Media";
 "语言" = "Language";
+"全部" = "All";
 "界面语言" = "Interface Language";
 "选择语言" = "Choose Language";
 "选择 MyTV 使用的界面语言。你之后也可以在设置中修改。" = "Choose the language used by MyTV. You can change it later in Settings.";

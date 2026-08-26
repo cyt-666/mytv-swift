@@ -86,6 +86,7 @@
 		46D259E1AC2C7EC7A7C1911A /* WindowAccessor.swift in Sources */ = {isa = PBXBuildFile; fileRef = 8D336591C15A7F7A22BAFAF8 /* WindowAccessor.swift */; };
 		46D6354E62D1F07AAA749C0E /* SearchAPI.swift in Sources */ = {isa = PBXBuildFile; fileRef = D13C0A30A417F439D7C5EC08 /* SearchAPI.swift */; };
 		49A744EDFBB45978D92A46ED /* ShowsViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = C9429E48AD89AE60A89A55FA /* ShowsViewModel.swift */; };
+		4B03D7E2DDD78255CDEED8C9 /* HistoryViewModelTests.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4CF1D8CC47D8F262903E9A30 /* HistoryViewModelTests.swift */; };
 		4ECB2ECB882264A33302E695 /* APIResponseCache.swift in Sources */ = {isa = PBXBuildFile; fileRef = C8B28B5A0EE5BBEF7C282F0B /* APIResponseCache.swift */; };
 		4FDBE5303E81F98A590A1E2A /* AsyncShowPosterImage.swift in Sources */ = {isa = PBXBuildFile; fileRef = B2E7C05DB163A22FAB954EB1 /* AsyncShowPosterImage.swift */; };
 		50AD2C185797EF591E32930B /* EpisodeDetailViewModel.swift in Sources */ = {isa = PBXBuildFile; fileRef = 4964279DFC5FC568066CAD69 /* EpisodeDetailViewModel.swift */; };
@@ -287,6 +288,7 @@
 		4882717CB33F184DB528AF1B /* ShowsView.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = ShowsView.swift; sourceTree = "<group>"; };
 		48D4E895F0B68D255C2D89F1 /* GlassDesign.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = GlassDesign.swift; sourceTree = "<group>"; };
 		4964279DFC5FC568066CAD69 /* EpisodeDetailViewModel.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = EpisodeDetailViewModel.swift; sourceTree = "<group>"; };
+		4CF1D8CC47D8F262903E9A30 /* HistoryViewModelTests.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = HistoryViewModelTests.swift; sourceTree = "<group>"; };
 		53450D086E5021CD1EA09A9D /* KeychainService.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = KeychainService.swift; sourceTree = "<group>"; };
 		54ADDB63F2529CE2AB0B2A00 /* SyncAPI.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = SyncAPI.swift; sourceTree = "<group>"; };
 		5596364670D73A4E49ECE6FB /* MyTViOSApp.swift */ = {isa = PBXFileReference; lastKnownFileType = sourcecode.swift; path = MyTViOSApp.swift; sourceTree = "<group>"; };
@@ -554,6 +556,7 @@
 		90C5AE373CD66AD719FE9146 /* MyTVTests */ = {
 			isa = PBXGroup;
 			children = (
+				4CF1D8CC47D8F262903E9A30 /* HistoryViewModelTests.swift */,
 				4388EE0C35D4429EE3B65C44 /* ImagesDTOTests.swift */,
 				8037D0AC46CE87A95D89EB83 /* MoviePilotEpisodeStateTests.swift */,
 				37E27B644964AF8AD43104EA /* MoviePilotSearchModelsTests.swift */,
@@ -867,6 +870,7 @@
 			isa = PBXSourcesBuildPhase;
 			buildActionMask = 2147483647;
 			files = (
+				4B03D7E2DDD78255CDEED8C9 /* HistoryViewModelTests.swift in Sources */,
 				ADA12E06A117442E4BD26E17 /* ImagesDTOTests.swift in Sources */,
 				73F60F57A122FBE0553834CE /* MoviePilotEpisodeStateTests.swift in Sources */,
 				D35048FEE4340AA547F0209A /* MoviePilotSearchModelsTests.swift in Sources */,
@@ -1162,7 +1166,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app.ios;
 				PRODUCT_NAME = MyTV;
 				SDKROOT = iphoneos;
@@ -1329,7 +1333,7 @@
 					"$(inherited)",
 					"@executable_path/Frameworks",
 				);
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app.ios;
 				PRODUCT_NAME = MyTV;
 				SDKROOT = iphoneos;
@@ -1379,7 +1383,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
@@ -1402,7 +1406,7 @@
 					"@executable_path/../Frameworks",
 				);
 				MACOSX_DEPLOYMENT_TARGET = 15.0;
-				MARKETING_VERSION = 1.0.8;
+				MARKETING_VERSION = 1.0.9;
 				PRODUCT_BUNDLE_IDENTIFIER = com.mytv.app;
 				SDKROOT = macosx;
 				SWIFT_VERSION = 6.0;
